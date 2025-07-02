@@ -1,39 +1,54 @@
 from torch import no_grad, Tensor
 from src.data.abstract_domain import AbstractDomain
 import matplotlib.pyplot as plt
-from typing import Callable, List
+from typing import Callable, List, Tuple
 from scipy.interpolate import griddata
 import numpy as np
+from dataclasses import dataclass
 
 
 Function = Callable[[Tensor], Tensor]
 
 
-# TODO: dataclass?
-def plot_function_on_domain(function: Function, domain: AbstractDomain,
-                            function_name='u', x_label='x', y_lable='y',
-                            title='Graph', N=1000) -> None:
-    domain.generate_points(N)
-    points = domain.get_all_points()
+@dataclass
+class PlotContext():
+    function: Function = None
+    domain: AbstractDomain = None
+    function_name: str = 'u'
+    x_label: str = 'x'
+    y_label: str = 'y'
+    title: str = 'Graph'
+    N: int = 1000
+    colour_map: str = 'jet'
+    patches: List = None
+    figsize: Tuple = (6, 4)
+
+
+def plot_function_on_domain(ctx: PlotContext) -> None:
+    ctx.domain.generate_points()
+    points = ctx.domain.get_all_points()
 
     points_x = points[:, 0].cpu().detach().numpy()
     points_y = points[:, 1].cpu().detach().numpy()
 
-    x_lin = np.linspace(min(points_x), max(points_x), N)
-    y_lin = np.linspace(min(points_y), max(points_y), N)
+    x_lin = np.linspace(min(points_x), max(points_x), ctx.N)
+    y_lin = np.linspace(min(points_y), max(points_y), ctx.N)
 
-    with no_grad():
-        values = function(points).cpu().detach().numpy().squeeze()
+    values = ctx.function(points).cpu().detach().numpy().squeeze()
 
     X, Y = np.meshgrid(x_lin, y_lin)
     Z = griddata((points_x, points_y), values, (X, Y), method='cubic')
 
-    fig, ax = plt.subplots()
-    contour = ax.contourf(X, Y, Z, levels=100, cmap='viridis')
-    fig.colorbar(contour, ax=ax, label=function_name)
-    ax.set_xlabel(x_label)
-    ax.set_ylabel(y_lable)
-    ax.set_title(title)
+    fig, ax = plt.subplots(figsize=ctx.figsize)
+    contour = ax.contourf(X, Y, Z, levels=100, cmap='jet')
+    fig.colorbar(contour, ax=ax, label=ctx.function_name)
+    ax.set_xlabel(ctx.x_label)
+    ax.set_ylabel(ctx.y_label)
+    ax.set_title(ctx.title)
+
+    for patch in ctx.patches:
+        ax.add_patch(patch)
+
     plt.show()
 
 

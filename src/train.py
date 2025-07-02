@@ -24,6 +24,7 @@ class TrainingContext:
     scheduler: _LRScheduler = None
     N: int = 1000
     epochs: int = 5000
+    resample_freq: int = 50
 
 
 def simple_train(ctx: TrainingContext) -> List:
@@ -36,7 +37,9 @@ def simple_train(ctx: TrainingContext) -> List:
     for epoch in range(ctx.epochs):
         ctx.optimizer.zero_grad()
 
-        ctx.domain.generate_points(ctx.N)
+        if epoch % ctx.resample_freq == 0:
+            ctx.domain.generate_points()
+
         loss = ctx.loss_fn(ctx.model, ctx.domain)
 
         loss.backward()
@@ -52,25 +55,46 @@ def simple_train(ctx: TrainingContext) -> List:
     return loss_values
 
 
-def train_with_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=300) -> List:
-    ctx.epochs -= epochs_with_lbfgs
+def train_switch_to_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=500,
+                          lbfgs_lr=1e-3, max_iter=20, history_size=10) -> List:
     loss_values = simple_train(ctx)
 
     def closure():
         optimizer.zero_grad()
-        ctx.domain.generate_points(ctx.N)
         loss = ctx.loss_fn(ctx.model, ctx.domain)
-        loss.backward()
+        loss.backward(retain_graph=True)
         return loss
 
     print("Switching to LBFGS")
-    optimizer = opt.LBFGS(ctx.model.parameters(), lr=1e-4)
+    optimizer = opt.LBFGS(ctx.model.parameters(), lr=lbfgs_lr,
+                          max_iter=max_iter, history_size=history_size)
 
     for epoch in range(epochs_with_lbfgs):
         loss = optimizer.step(closure)
 
         if epoch % 100 == 99:
             print(f"Loss at lbfgs-epoch {epoch + 1} is: {loss.item()}")
+            loss_values.append(loss.item())
+
+    return loss_values
+
+
+def train_with_lbfgs(ctx: TrainingContext) -> List:
+    loss_values = []
+
+    def closure():
+        optimizer.zero_grad()
+        loss = ctx.loss_fn(ctx.model, ctx.domain)
+        loss.backward()
+        return loss
+
+    optimizer = opt.LBFGS(ctx.model.parameters(), lr=0.001)
+
+    for epoch in range(ctx.epochs):
+        loss = optimizer.step(closure)
+
+        if epoch % 100 == 99:
+            print(f"Loss {epoch + 1} is: {loss.item()}")
             loss_values.append(loss.item())
 
     return loss_values

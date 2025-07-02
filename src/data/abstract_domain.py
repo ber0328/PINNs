@@ -30,14 +30,6 @@ class AbstractDomain(ABC):
         pass
 
     @abstractmethod
-    def plot_points(self) -> None:
-        """
-        Vykresli body generovane touto tridou.
-        :return: None
-        """
-        pass
-
-    @abstractmethod
     def get_all_points(self) -> torch.Tensor:
         """
         Vrati vsechny body generovane touto tridou.

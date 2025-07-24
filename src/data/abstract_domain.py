@@ -11,8 +11,6 @@ class AbstractDomain(ABC):
         2) obsahuje jeden, ci vice tesnoru reprezentujici hranicni body domeny.
         3) je schopna generovat nahodna data pro vsechny polozky
            implementace -- implementuje funkci "generate_points".
-        4) je schopna vykreslit body generovane touto tridou -- implementuje
-           funkci "plot".
         5) je schopna vracet vsechny body generovane touto tridou najednou
            -- implementuje funkci "get_all_points".
 

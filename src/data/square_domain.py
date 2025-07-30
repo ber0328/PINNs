@@ -75,7 +75,7 @@ class SquareDomain(AbstractDomain):
             sampler = qmc.LatinHypercube(2)
             sample = sampler.random(self.cfg.N_int)
             sample = qmc.scale(sample, [self.cfg.x_0, self.cfg.x_0], [self.cfg.x_1, self.cfg.y_1])
-            
+
             return torch.from_numpy(sample).to(self.cfg.device).float()
 
     def _gen_rand_left_bnd(self) -> torch.Tensor:

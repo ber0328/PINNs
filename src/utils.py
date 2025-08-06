@@ -2,7 +2,7 @@ from torch import no_grad, Tensor
 from src.data.abstract_domain import AbstractDomain
 from src.data.cube_domain import CubeContext
 import matplotlib.pyplot as plt
-from typing import Callable, List, Tuple
+from typing import Callable, List, Tuple, Dict
 from scipy.interpolate import griddata
 import numpy as np
 from dataclasses import dataclass
@@ -26,6 +26,7 @@ class PlotContext():
     figsize: Tuple = (6, 4)
     vmin: float = 0
     vmax: float = 5
+    save_path: str = './images'
 
 
 def plot_function_on_domain(ctx: PlotContext) -> None:
@@ -68,22 +69,23 @@ def plot_domain(domain: AbstractDomain, time: int = 0) -> None:
     plt.show()
 
 
-def plot_loss_values(values: List[float], x_label: str, y_label: str,
-                     title: str = "Loss values") -> None:
-    n = range(len(values))
+def plot_loss_values(loss_values: Dict[str, List[float]], plot_ctx: PlotContext) -> None:
+    _, ax = plt.subplots(figsize=(6, 4))
 
-    fig, ax = plt.subplots(figsize=(6, 4))
+    for label, values in loss_values.items():
+        n = range(len(values))
+        ax.plot(n, values, label=label)
 
-    ax.plot(n, values)
-    ax.set_xlabel(xlabel=x_label)
-    ax.set_ylabel(ylabel=y_label)
+    ax.set_xlabel(xlabel=plot_ctx.x_label)
+    ax.set_ylabel(ylabel=plot_ctx.y_label)
     ax.set_yscale('log')
 
     x_ticks = ax.get_xticks()
     new_x_labels = [str(tick * 100) for tick in x_ticks]
     ax.set_xticklabels(new_x_labels)
-    ax.set_title(title)
-    plt.show()
+    ax.set_title(plot_ctx.title)
+    ax.legend()
+    plt.savefig(plot_ctx.save_path)
 
 
 def plot_vector_field_2d(function: Function, plot_ctx: PlotContext):
@@ -104,7 +106,7 @@ def plot_vector_field_2d(function: Function, plot_ctx: PlotContext):
     Y = Y.cpu().detach().numpy().reshape((N, N))
 
     plt.quiver(X, Y, Z1, Z2)
-    plt.show()
+    plt.savefig(plot_ctx.save_path)
 
 
 def plot_function_on_2d_cube(function: Function, plot_ctx: PlotContext):
@@ -131,4 +133,4 @@ def plot_function_on_2d_cube(function: Function, plot_ctx: PlotContext):
     for patch in plot_ctx.patches:
         ax.add_patch(patch)
 
-    plt.show()
+    plt.savefig(plot_ctx.save_path)

@@ -1,0 +1,3 @@
+Re=1000:
+PDE residuum of model: 2.160562515258789
+Continuity condition of model: 1.919966220855713

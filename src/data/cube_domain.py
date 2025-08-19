@@ -2,6 +2,7 @@ import torch
 from src.data.abstract_domain import AbstractDomain
 from typing import Callable, Tuple, List
 from dataclasses import dataclass
+from numpy import pi
 
 
 @dataclass
@@ -19,6 +20,7 @@ class CubeContext:
     residuum_fn: Callable = None
     model: torch.nn.Module = None
     loss_fn: Callable = None
+    bias_pts: List[Tuple] = None
 
 
 class CubeDomain(AbstractDomain):
@@ -70,6 +72,18 @@ class CubeDomain(AbstractDomain):
 
         if self.ctx.int_sampling == 'Uniform':
             return (u_bound - l_bound) * torch.rand((self.ctx.N_int, self.ctx.dim), device=self.ctx.device) + l_bound
+        elif self.ctx.int_sampling == 'Biased':
+            base_pts = (u_bound - l_bound) * torch.rand((self.ctx.N_int, self.ctx.dim), device=self.ctx.device) + l_bound
+
+            for point, n, radius in self.ctx.bias_pts:
+                pts = 2 * torch.rand((n, self.ctx.dim), device=self.ctx.device)
+                pts = torch.sub(pts, 1)
+                mask = torch.sum(pts[:, :-1]**2, dim=1) <= 1
+                pts = radius * pts[mask]
+                pts[:, :-1] += point
+                base_pts = torch.cat([base_pts, pts], dim=0)
+
+            return base_pts
 
     def _gen_side(self, i: int) -> Tuple[torch.Tensor, torch.Tensor]:
         u_bound = torch.tensor(self.ctx.u_bounds, device=self.ctx.device)

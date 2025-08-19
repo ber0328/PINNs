@@ -7,6 +7,7 @@ import torch
 from torch.autograd import grad
 import numpy as np
 from typing import List
+from torch._dynamo import disable
 
 
 def compute_derivatives_2d(model: torch.nn.Module, x: torch.Tensor, i: int = 0) -> torch.Tensor:
@@ -95,7 +96,7 @@ def L2_norm(f, g, input_dim: int, u_bounds: List, l_bounds: List,
 
 
 def nabla(input: torch.Tensor, output: torch.Tensor, retain: bool = False):
-    return grad(output, input, torch.ones_like(output), create_graph=True, retain_graph=retain)[0]
+    return grad(output, input, torch.ones_like(output), create_graph=True, retain_graph=retain)[0][:, :-1]
 
 
 def div(input: torch.Tensor, output: torch.Tensor, retain: bool = False, device: str = 'cpu'):

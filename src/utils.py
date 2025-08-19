@@ -24,37 +24,11 @@ class PlotContext():
     device: str = 'cpu'
     patches: List = None
     figsize: Tuple = (6, 4)
+    fontsize: int = 12
     vmin: float = 0
     vmax: float = 5
-    save_path: str = './images'
-
-
-def plot_function_on_domain(ctx: PlotContext) -> None:
-    ctx.domain.generate_points()
-    points = ctx.domain.get_all_points()
-
-    points_x = points[:, 0].cpu().detach().numpy()
-    points_y = points[:, 1].cpu().detach().numpy()
-
-    x_lin = np.linspace(min(points_x), max(points_x), ctx.N)
-    y_lin = np.linspace(min(points_y), max(points_y), ctx.N)
-
-    values = ctx.function(points).cpu().detach().numpy().squeeze()
-
-    X, Y = np.meshgrid(x_lin, y_lin)
-    Z = griddata((points_x, points_y), values, (X, Y), method='cubic')
-
-    fig, ax = plt.subplots(figsize=ctx.figsize)
-    contour = ax.contourf(X, Y, Z, levels=100, cmap='jet')
-    fig.colorbar(contour, ax=ax, label=ctx.function_name)
-    ax.set_xlabel(ctx.x_label)
-    ax.set_ylabel(ctx.y_label)
-    ax.set_title(ctx.title)
-
-    for patch in ctx.patches:
-        ax.add_patch(patch)
-
-    plt.show()
+    save_img: bool = True
+    save_path: str = 'plot.png'
 
 
 def plot_domain(domain: AbstractDomain, time: int = 0) -> None:
@@ -85,11 +59,14 @@ def plot_loss_values(loss_values: Dict[str, List[float]], plot_ctx: PlotContext)
     ax.set_xticklabels(new_x_labels)
     ax.set_title(plot_ctx.title)
     ax.legend()
-    plt.savefig(plot_ctx.save_path)
+
+    if plot_ctx.save_img:
+        plt.savefig(plot_ctx.save_path)
+    else:
+        plt.show()
 
 
-def plot_vector_field_2d(function: Function, plot_ctx: PlotContext):
-    N = 10
+def plot_vector_field_2d(function: Function, plot_ctx: PlotContext, N: int = 10):
     pts_x = torch.linspace(plot_ctx.l_bounds[0], plot_ctx.u_bounds[0], N, device=plot_ctx.device)
     pts_y = torch.linspace(plot_ctx.l_bounds[1], plot_ctx.u_bounds[1], N, device=plot_ctx.device)
 
@@ -98,15 +75,29 @@ def plot_vector_field_2d(function: Function, plot_ctx: PlotContext):
     inputs = torch.cat((X, Y), dim=1)
 
     with torch.no_grad():
-        Z1, Z2 = function(inputs)
-        Z1 = Z1.cpu().detach().numpy().reshape((N, N))
-        Z2 = Z2.cpu().detach().numpy().reshape((N, N))
+        v = function(inputs)
+        v_x, v_y = v[:, 0:1], v[:, 1:2]
+        norm = torch.sqrt(v_x**2 + v_y**2)
+        v_x_unit, v_y_unit = torch.div(v_x, norm), torch.div(v_y, norm)
+        v_x_unit = v_x_unit.cpu().detach().numpy().reshape((N, N))
+        v_y_unit = v_y_unit.cpu().detach().numpy().reshape((N, N))
 
     X = X.cpu().detach().numpy().reshape((N, N))
     Y = Y.cpu().detach().numpy().reshape((N, N))
+    norm = norm.cpu().detach().numpy().reshape((N, N))
 
-    plt.quiver(X, Y, Z1, Z2)
-    plt.savefig(plot_ctx.save_path)
+    fig, ax = plt.subplots(figsize=plot_ctx.figsize)
+    contour = ax.contourf(X, Y, norm, levels=100, cmap=plot_ctx.colour_map, vmin=plot_ctx.vmin, vmax=plot_ctx.vmax)
+    fig.colorbar(contour, ax=ax, label=plot_ctx.function_name)
+    ax.set_xlabel(plot_ctx.x_label, fontsize=plot_ctx.fontsize)
+    ax.set_ylabel(plot_ctx.y_label, fontsize=plot_ctx.fontsize)
+    ax.set_title(plot_ctx.title, fontsize=plot_ctx.fontsize)
+    ax.quiver(X, Y, v_x_unit, v_y_unit, color='w')
+
+    if plot_ctx.save_img:
+        plt.savefig(plot_ctx.save_path)
+    else:
+        plt.show()
 
 
 def plot_function_on_2d_cube(function: Function, plot_ctx: PlotContext):
@@ -133,4 +124,7 @@ def plot_function_on_2d_cube(function: Function, plot_ctx: PlotContext):
     for patch in plot_ctx.patches:
         ax.add_patch(patch)
 
-    plt.savefig(plot_ctx.save_path)
+    if plot_ctx.save_img:
+        plt.savefig(plot_ctx.save_path)
+    else:
+        plt.show()

@@ -1,4 +1,0 @@
-PDE residuum of model: 0.048872411251068115
-Continuity condition of model: 0.03028889372944832
-PDE residuum of model: 0.07664096355438232
-Continuity condition of model: 0.030917227268218994

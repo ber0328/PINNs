@@ -92,7 +92,7 @@ def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain) -> torch.Tensor:
     u_side = model(side_input)[:, :-1]
     side_loss = torch.mean(torch.cat([u_side[:, 0:1]**2 + u_side[:, 1:2]**2, (u_top[:, 0:1] - 1)**2 + u_top[:, 1:2]**2], dim=0))
 
-    return pde_loss + init_loss + side_loss
+    return [pde_loss, init_loss, side_loss]
 
 
 domain_ctx = cb.CubeContext(
@@ -134,7 +134,8 @@ train_ctx = train.TrainingContext(
     resample=False
 )
 
-loss_values = []
+total_loss_values = []
+component_wise_loss_values = [[], [], []]
 minimal_loss_value = sys.maxsize
 
 print('Starting training...')
@@ -152,18 +153,23 @@ for i in range(30):
     train_ctx.epochs = 500
     include_ri = True
     det_metric_computed = False
-    loss_values += train.simple_train(train_ctx)
+    total_loss_values_exp, component_loss_values_exp = train.simple_train(train_ctx)
 
     # train current solution
     print('Done')
-    train_ctx.epochs = 1500
+    train_ctx.epochs = 1_500
     include_ri = False
-    loss_values += train.simple_train(train_ctx)
+    total_loss_values_exp_trc, component_wise_loss_values_exp_trc = train.simple_train(train_ctx)
 
-    if loss_values[-1] < minimal_loss_value:
-        print(f'Updating best performing model. Current loss: {loss_values[-1]}.')
+    total_loss_values += total_loss_values_exp + total_loss_values_exp_trc
 
-        minimal_loss_value = loss_values[-1]
+    for i, component in enumerate(component_loss_values_exp):
+        component += component_wise_loss_values_exp_trc[i]
+
+    if total_loss_values[-1] < minimal_loss_value:
+        print(f'Updating best performing model. Current loss: {total_loss_values[-1]}.')
+
+        minimal_loss_value = total_loss_values[-1]
         torch.save(model.state_dict(), TRAIN_TEMP_SAVE_PATH)
 
 print('Finishing exploration phase...')
@@ -173,10 +179,14 @@ include_ri = False
 model.load_state_dict(torch.load(TRAIN_TEMP_SAVE_PATH, weights_only=True))
 train_ctx.optimizer = torch.optim.Adam(model.parameters(), lr=5e-6)
 train_ctx.epochs = 75_000
-loss_values += train.train_switch_to_lbfgs(train_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=500)
+total_loss_values_ftn, component_wise_loss_values_ftn = train.train_switch_to_lbfgs(train_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
+
+total_loss_values += total_loss_values_ftn
+for i, component in enumerate(component_wise_loss_values_ftn):
+    component_wise_loss_values[i] += component
 
 print('Finishing fine-tuning phase...')
-print(f'Finishing training. Last loss: {loss_values[-1]}')
+print(f'Finishing training. Last loss: {total_loss_values[-1]}')
 
 plot_ctx = utils.PlotContext(
     l_bounds=L_BOUNDS,
@@ -195,8 +205,10 @@ plot_ctx = utils.PlotContext(
 )
 
 # vykresleni ztraty
-plot_ctx.save_path = 'cavity_flow_loss.png'
-utils.plot_loss_values({'Total loss': loss_values}, plot_ctx)
+date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
+
+plot_ctx.save_path = f'cavity_flow_loss_{date}.png'
+utils.plot_loss_values({'Total loss': total_loss_values}, plot_ctx)
 
 # plot_ctx.x_label = 'x'
 # plot_ctx.y_label = 'y'
@@ -231,15 +243,14 @@ pde_res_l2 = calc.L2_norm(lambda x: 0, model_pde_residuum, 3, U_BOUNDS, L_BOUNDS
 div_res_l2 = calc.L2_norm(lambda x: 0, model_div_residuum, 3, U_BOUNDS, L_BOUNDS, device, 20)
 
 print('Writing log...')
-with open('train_log.txt', 'a') as f:
+with open(f'train_{date}_log.txt', 'a') as f:
     f.write(f'PDE residuum of model: {pde_res_l2}\n')
     f.write(f'Continuity condition residuum of model: {div_res_l2}\n')
-    f.write(f'Last loss value: {loss_values[-1]}\n')
+    f.write(f'Last loss value: {total_loss_values[-1]}\n')
     f.write(f'Re: {RE}\n')
     f.write(f'A: {A}\n')
 
 
 print('Saving finished model...')
-date = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 torch.save(model.state_dict(), f'model_ns_re_1000_{date}.pt')
 print('Model saved')

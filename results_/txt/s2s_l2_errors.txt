@@ -1,0 +1,28 @@
+Test 0 - model 0 l2 error: 0.1977076679468155
+Test 0 - model 1 l2 error: 0.29804208874702454
+Test 0 - model 2 l2 error: 0.31182950735092163
+Test 0 - model 3 l2 error: 0.34391990303993225
+Test 0 - model 4 l2 error: 0.3529343605041504
+Test 0 total l2 error: 0.6841042637825012
+
+Test 1 - model 0 l2 error: 0.03936344012618065
+Test 1 - model 1 l2 error: 0.18893852829933167
+Test 1 - model 2 l2 error: 0.20150429010391235
+Test 1 - model 3 l2 error: 0.2196567803621292
+Test 1 - model 4 l2 error: 0.19646230340003967
+Test 1 total l2 error: 0.40582969784736633
+
+Test 2 - model 0 l2 error: 0.014579303562641144
+Test 2 - model 1 l2 error: 0.1329110860824585
+Test 2 - model 2 l2 error: 0.17121535539627075
+Test 2 - model 3 l2 error: 0.18737539649009705
+Test 2 - model 4 l2 error: 0.30274322628974915
+Test 2 total l2 error: 0.4170798659324646
+
+Test 3 - model 0 l2 error: 0.07015063613653183
+Test 3 - model 1 l2 error: 0.24709539115428925
+Test 3 - model 2 l2 error: 0.27981051802635193
+Test 3 - model 3 l2 error: 0.2972570061683655
+Test 3 - model 4 l2 error: 0.29885876178741455
+Test 3 total l2 error: 0.5674058794975281
+

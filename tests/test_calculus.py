@@ -118,7 +118,7 @@ def test_vec_2_laplacian(input_data_2d, vec_func_2, vec_func_2_laplacian):
 
 def test_nabla(input_data, scalar_func, scalar_func_grad):
     output_data = scalar_func(input_data)
-    result = calc.nabla(input_data, output_data)[:, :-1]  # Exclude time dimension
+    result = calc.nabla(input_data, output_data)  # Exclude time dimension
     expected_result = scalar_func_grad(input_data)
     assert torch.allclose(result, expected_result)
 

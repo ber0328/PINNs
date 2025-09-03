@@ -85,7 +85,7 @@ def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain) -> torch.Tensor:
         initial_loss_values.append(init_loss.item())
 
     iteration += 1
-    return pde_loss + side_loss + 500 * init_loss
+    return [pde_loss, side_loss, 500 * init_loss]
 
 
 # definice domeny

@@ -41,7 +41,7 @@ def laplacian_2d(model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
 def compute_derivatives_ns(model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
     x.requires_grad_(True)
     out = model(x)
-    psi, p = out[:, 0], out[:, 2]
+    psi, p = out[:, 0], out[:, 1]
 
     psi_grad = grad(psi, x, torch.ones_like(psi), create_graph=True)[0]
     v, u = -psi_grad[:, 0:1], psi_grad[:, 1:2]
@@ -96,7 +96,7 @@ def L2_norm(f, g, input_dim: int, u_bounds: List, l_bounds: List,
 
 
 def nabla(input: torch.Tensor, output: torch.Tensor, retain: bool = False):
-    return grad(output, input, torch.ones_like(output), create_graph=True, retain_graph=retain)[0][:, :-1]
+    return grad(output, input, torch.ones_like(output), create_graph=True, retain_graph=retain)[0]
 
 
 def div(input: torch.Tensor, output: torch.Tensor, retain: bool = False, device: str = 'cpu'):

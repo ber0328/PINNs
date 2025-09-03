@@ -38,7 +38,6 @@ def simple_train(ctx: TrainingContext) -> List:
     Jednoduchy trenovaci algoritmus, ktery generuje nahodna data v kazde
     epose.
     """
-    ctx.domain.generate_points()
     component_loss_values = [[] for _ in range(len(ctx.loss_fn(ctx.model, ctx.domain)))]
     total_loss_values = []
 

@@ -14,10 +14,33 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TRAIN_TEMP_SAVE_PATH = './most_eff_model.pt'
 NU = 0.001
 RE = 1 / NU
-T_MAX = 5
+T_MAX = 1
 L_BOUNDS = [0, 0, 0]
 U_BOUNDS = [1, 1, T_MAX]
 A = 0.3  # used during training to select A percentage of points with smallest detection metric
+
+
+class SplitDomain(cb.CubeDomain):
+    def __init__(self, domain_ctx: cb.CubeContext):
+        super(SplitDomain, self).__init__(domain_ctx)
+        self.metric_computed = False
+
+    def split_pts(self, det_metric: torch.Tensor):
+        _, worst = torch.topk(det_metric, int(A * self.ctx.N_int), largest=False)
+        self.bad_pts_mask = torch.zeros(det_metric.shape[0], dtype=torch.bool, device=device)
+        self.bad_pts_mask[worst] = True
+
+    def compute_detection_metric(self, u, input, dim):
+        det_metric = 0
+
+        for i in range(dim):
+            abs_nabla_i = torch.abs(grad(u[:, i], input, torch.ones_like(u[:, i]), create_graph=True)[0][:, :-1])
+            det_metric_i = torch.sum(abs_nabla_i, dim=1)
+            det_metric += det_metric_i
+
+        self.metric_computed = True
+
+        return det_metric
 
 
 # NOTE: input is assumed to have requires_grad=True
@@ -36,46 +59,27 @@ def continuity_residuum(output: torch.Tensor, input: torch.Tensor) -> torch.Tens
     return u_x + v_y
 
 
-count = 0
-det_metric_computed = False
-det_metric = 0
 include_ri = True
 
 
-def compute_detection_metric(u, input, dim):
-    det_metric = 0
-
-    for i in range(dim):
-        abs_nabla_i = torch.abs(grad(u[:, i], input, torch.ones_like(u[:, i]), create_graph=True)[0][:, :-1])
-        det_metric_i = torch.sum(abs_nabla_i, dim=1)
-        det_metric += det_metric_i
-
-    global det_metric_computed
-    det_metric_computed = True
-
-    return det_metric
-
-
-def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain) -> torch.Tensor:
+def loss_fn(model: torch.nn.Module, domain: SplitDomain) -> torch.Tensor:
     # pde loss
     pde_input = domain.interior.requires_grad_(True)
     pde_output = model(pde_input)
+
+    if include_ri:
+        if not domain.metric_computed:
+            det_metric = domain.compute_detection_metric(pde_output, pde_input, 3)
+            domain.split_pts(det_metric)
+            utils.plot_points({'All points': domain.interior[~domain.bad_pts_mask],
+                               'Bad points': domain.interior[domain.bad_pts_mask]})
+
+        rand_bad_pts = torch.rand((pde_input[domain.bad_pts_mask].shape[0], 3), device=device)
+        ri_loss = torch.mean((rand_bad_pts - pde_output[domain.bad_pts_mask])**2)
+
     pde_res = pde_residuum(pde_output, pde_input)
     cont_res = continuity_residuum(pde_output, pde_input)
     pde_loss = torch.mean(pde_res[:, 0:1]**2 + pde_res[:, 1:2]**2) + torch.mean(cont_res**2)
-
-    global include_ri, det_metric
-
-    if include_ri:
-        if not det_metric_computed:
-            det_metric = compute_detection_metric(pde_output, pde_input, 3)
-
-        _, worst = torch.topk(det_metric, int(A * domain.ctx.N_int), largest=False)
-        bad_pts = pde_input[worst].unsqueeze(1)
-        rand_bad_pts = torch.rand((bad_pts.shape[0], 3), device=device)
-        ri_loss = torch.mean((rand_bad_pts - pde_output[worst])**2)
-
-        pde_loss += ri_loss
 
     # init loss
     init_input = domain.sides[-1][0].requires_grad_(True)
@@ -83,16 +87,15 @@ def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain) -> torch.Tensor:
     u_init, p_init = init_output[:, :-1], init_output[:, -1:]
     init_loss = torch.mean(u_init[:, 0:1]**2 + u_init[:, 1:2]**2) + torch.mean(p_init**2)
 
-    # top loss
+    # top + side loss
     top_input = domain.sides[1][1].requires_grad_(True)
     u_top = model(top_input)[:, :-1]
-
-    # side loss
     side_input = torch.cat([domain.sides[0][0], domain.sides[0][1], domain.sides[1][0]], dim=0).requires_grad_(True)
     u_side = model(side_input)[:, :-1]
-    side_loss = torch.mean(torch.cat([u_side[:, 0:1]**2 + u_side[:, 1:2]**2, (u_top[:, 0:1] - 1)**2 + u_top[:, 1:2]**2], dim=0))
+    side_loss = torch.mean(torch.cat([u_side[:, 0:1]**2 + u_side[:, 1:2]**2,
+                                      (u_top[:, 0:1] - 1)**2 + u_top[:, 1:2]**2], dim=0))
 
-    return [pde_loss, init_loss, side_loss]
+    return [pde_loss, init_loss, side_loss, ri_loss] if include_ri else [pde_loss, init_loss, side_loss]
 
 
 domain_ctx = cb.CubeContext(
@@ -104,7 +107,7 @@ domain_ctx = cb.CubeContext(
     device=device
 )
 
-domain = cb.CubeDomain(domain_ctx)
+domain = SplitDomain(domain_ctx)
 
 
 # defining the model
@@ -116,8 +119,8 @@ model_ctx = mm.ModelContext(
     l_bounds=L_BOUNDS,
     last_layer_activation='tanh',
     fourier_features=True,
-    fourier_frequencies=10,
-    fourier_scale=10.0
+    fourier_frequencies=128,
+    fourier_scale=3.0
 )
 
 model = mm.MLPModel(model_ctx).to(device)
@@ -135,7 +138,6 @@ train_ctx = train.TrainingContext(
 )
 
 total_loss_values = []
-component_wise_loss_values = [[], [], []]
 minimal_loss_value = sys.maxsize
 
 print('Starting training...')
@@ -152,7 +154,7 @@ for i in range(30):
     print('\'Exploring\'')
     train_ctx.epochs = 500
     include_ri = True
-    det_metric_computed = False
+    domain.metric_computed = False
     total_loss_values_exp, component_loss_values_exp = train.simple_train(train_ctx)
 
     # train current solution
@@ -162,9 +164,6 @@ for i in range(30):
     total_loss_values_exp_trc, component_wise_loss_values_exp_trc = train.simple_train(train_ctx)
 
     total_loss_values += total_loss_values_exp + total_loss_values_exp_trc
-
-    for i, component in enumerate(component_loss_values_exp):
-        component += component_wise_loss_values_exp_trc[i]
 
     if total_loss_values[-1] < minimal_loss_value:
         print(f'Updating best performing model. Current loss: {total_loss_values[-1]}.')
@@ -176,14 +175,12 @@ print('Finishing exploration phase...')
 print('Selecting best performing model and starting fine-tuning phase...')
 
 include_ri = False
-model.load_state_dict(torch.load(TRAIN_TEMP_SAVE_PATH, weights_only=True))
+model.load_state_dict(torch.load(TRAIN_TEMP_SAVE_PATH))
 train_ctx.optimizer = torch.optim.Adam(model.parameters(), lr=5e-6)
 train_ctx.epochs = 75_000
 total_loss_values_ftn, component_wise_loss_values_ftn = train.train_switch_to_lbfgs(train_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
 
 total_loss_values += total_loss_values_ftn
-for i, component in enumerate(component_wise_loss_values_ftn):
-    component_wise_loss_values[i] += component
 
 print('Finishing fine-tuning phase...')
 print(f'Finishing training. Last loss: {total_loss_values[-1]}')
@@ -252,5 +249,5 @@ with open(f'train_{date}_log.txt', 'a') as f:
 
 
 print('Saving finished model...')
-torch.save(model.state_dict(), f'model_ns_re_1000_{date}.pt')
+torch.save(model.state_dict(), f'model_ns_re_{RE}_{date}.pt')
 print('Model saved')

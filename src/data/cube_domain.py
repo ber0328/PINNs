@@ -2,7 +2,7 @@ import torch
 from src.data.abstract_domain import AbstractDomain
 from typing import Callable, Tuple, List
 from dataclasses import dataclass
-from numpy import pi
+from scipy.stats import qmc
 
 
 @dataclass
@@ -28,6 +28,7 @@ class CubeDomain(AbstractDomain):
         self.ctx = ctx
         self.interior: torch.Tensor
         self.sides: List[Tuple[torch.Tensor, torch.Tensor]]
+        self.generate_points()
 
     def generate_points(self):
         # generate side_pts
@@ -84,6 +85,11 @@ class CubeDomain(AbstractDomain):
                 base_pts = torch.cat([base_pts, pts], dim=0)
 
             return base_pts
+        elif self.ctx.int_sampling == 'Latin':
+            sampler = qmc.LatinHypercube(self.ctx.dim)
+            sample = sampler.random(self.ctx.N_int)
+            sample = qmc.scale(sample, self.ctx.l_bounds, self.ctx.u_bounds)
+            return torch.from_numpy(sample).to(self.ctx.device).float()
 
     def _gen_side(self, i: int) -> Tuple[torch.Tensor, torch.Tensor]:
         u_bound = torch.tensor(self.ctx.u_bounds, device=self.ctx.device)
@@ -105,3 +111,4 @@ class CubeDomain(AbstractDomain):
     def _gen_rand_bnd_tensor(self, u_bound: torch.Tensor, l_bound: torch.Tensor, size: Tuple) -> torch.Tensor:
         if self.ctx.bnd_sampling == 'Uniform':        
             return (u_bound - l_bound) * torch.rand(size, device=self.ctx.device) + l_bound
+

@@ -1,0 +1,5 @@
+PDE residuum of model: 0.050861846655607224
+Continuity condition residuum of model: 0.021263565868139267
+Last loss value: 0.006271122023463249
+Re: 1000.0
+A: 0.3

@@ -20,7 +20,7 @@ class FourierFeature(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = tau * x @ self.B
-        return torch.cat([torch.sin(x), torch.cos(x)], dim=-1)
+        return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
 
 
 @dataclass

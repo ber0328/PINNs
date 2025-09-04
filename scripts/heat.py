@@ -103,11 +103,11 @@ def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain):
 model_naive_ctx = mm.ModelContext(
     input_dim=3,
     output_dim=1,
-    layer=[64, 64, 64, 64],
+    layer=[32, 32, 32, 32],
     l_bounds=l_bounds,
     u_bounds=u_bounds,
     last_layer_activation='tanh',
-    fourier_features=True,
+    fourier_features=False,
     fourier_frequencies=10,
     fourier_scale=1.0
 )
@@ -143,13 +143,13 @@ train_naive_ctx = train.TrainingContext(
     domain=domain,
     loss_fn=loss_fn,
     optimizer=optimizer_naive,
-    epochs=60_000,
+    epochs=1,
     resample_freq=2000,
     resample=True
 )
 
 domain.generate_points()
-naive_loss_vals = train.train_switch_to_lbfgs(train_naive_ctx, lbfgs_lr=0.1)
+naive_loss_vals, _ = train.train_switch_to_lbfgs(train_naive_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
 
 # %%
 # Dale zkusime curriculum strategii
@@ -159,7 +159,7 @@ tratin_curriculum_ctx = train.TrainingContext(
     domain=domain,
     loss_fn=loss_fn,
     optimizer=optimizer_curriculum,
-    epochs=1_500,
+    epochs=1,
     resample_freq=1_000,
 )
 
@@ -168,17 +168,18 @@ tratin_curriculum_ctx = train.TrainingContext(
 domain.ctx.l_bounds = [-1.0, -1.0, 0.0]
 domain.ctx.u_bounds = [1.0, 1.0, 1.0]
 first_iteration = True
-curriculum_loss_vals = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=500)
+curriculum_loss_vals, _ = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
 
 DELTA_TS = [2.0, 3.0, 4.0, 5.0]
 for delta_t in DELTA_TS:
     # posunuti domeny
-    print(f"Training in interval: [0, {float(delta_t)}")
+    print(f"Training in interval: [0, {float(delta_t)}]")
     domain.ctx.u_bounds = [1.0, 1.0, delta_t]
     # nastaveni nove pocatecni podminky
 
     # trenovani v novem casovem useku
-    curriculum_loss_vals += train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=500)
+    new_curr_losses, _ = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
+    curriculum_loss_vals += new_curr_losses
 
 # %%
 plot_ctx = utils.PlotContext(
@@ -192,6 +193,9 @@ plot_ctx = utils.PlotContext(
     N=100,
     x_label="Epochs",
     y_label="Loss",
+    save_img=True,
+    save_path='../results/total_loss.png',
+    titles=["Total losses"]
 )
 
 utils.plot_loss_values({'curriculum loss': curriculum_loss_vals, 'Naive loss': naive_loss_vals}, plot_ctx)
@@ -213,9 +217,11 @@ def naive_u_t(input: torch.Tensor) -> torch.Tensor:
 plot_ctx.function_names = ['u']
 
 for TIME in [0.0, 1, 2, 3, 4, 5]:
+    plot_ctx.save_path = f'../results/curr_t={TIME}.png'
     plot_ctx.titles = [f"Curriculum temperature at t={TIME} s"]
     utils.plot_function_on_2d_cube([s2s_u_t], plot_ctx)
 
 for TIME in [0.0, 1, 2, 3, 4, 5]:
-    plot_ctx.title = f"Naive temperature at t={TIME} s"
+    plot_ctx.save_path = f'../results/naive_t={TIME}.png'
+    plot_ctx.titles = [f"Naive temperature at t={TIME} s"]
     utils.plot_function_on_2d_cube([naive_u_t], plot_ctx)

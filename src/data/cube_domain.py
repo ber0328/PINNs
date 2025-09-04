@@ -21,6 +21,7 @@ class CubeContext:
     model: torch.nn.Module = None
     loss_fn: Callable = None
     bias_pts: List[Tuple] = None
+    time_dependant: bool = True
 
 
 class CubeDomain(AbstractDomain):
@@ -76,12 +77,13 @@ class CubeDomain(AbstractDomain):
         elif self.ctx.int_sampling == 'Biased':
             base_pts = (u_bound - l_bound) * torch.rand((self.ctx.N_int, self.ctx.dim), device=self.ctx.device) + l_bound
 
-            for point, n, radius in self.ctx.bias_pts:
+            # adds a ball of random points centered 
+            for center_point, n, radius in self.ctx.bias_pts:
                 pts = 2 * torch.rand((n, self.ctx.dim), device=self.ctx.device)
                 pts = torch.sub(pts, 1)
-                mask = torch.sum(pts[:, :-1]**2, dim=1) <= 1
+                mask = torch.sum(pts[:, :-1]**2, dim=1) <= 1 if self.ctx.time_dependant else torch.sum(pts**2, dim=1) <= 1
                 pts = radius * pts[mask]
-                pts[:, :-1] += point
+                pts[:, :-1] += center_point
                 base_pts = torch.cat([base_pts, pts], dim=0)
 
             return base_pts
@@ -111,4 +113,3 @@ class CubeDomain(AbstractDomain):
     def _gen_rand_bnd_tensor(self, u_bound: torch.Tensor, l_bound: torch.Tensor, size: Tuple) -> torch.Tensor:
         if self.ctx.bnd_sampling == 'Uniform':        
             return (u_bound - l_bound) * torch.rand(size, device=self.ctx.device) + l_bound
-

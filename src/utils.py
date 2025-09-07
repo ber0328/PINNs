@@ -7,6 +7,7 @@ from scipy.interpolate import griddata
 from dataclasses import dataclass
 import torch
 from copy import copy
+from numpy import linspace
 Function = Callable[[Tensor], Tensor]
 
 
@@ -67,28 +68,44 @@ def plot_loss_values(loss_values: Dict[str, List[float]], plot_ctx: PlotContext)
         plt.show()
 
 
-def plot_vector_field_2d(functions: List[Function], plot_ctx: PlotContext, N: int = 10):
+def plot_vector_field_2d(functions: List[Function], plot_ctx: PlotContext,
+                         N: int = 10, n_heigth: int = 10, n_width: int = 10):
     pts_x = torch.linspace(plot_ctx.l_bounds[0], plot_ctx.u_bounds[0], N, device=plot_ctx.device)
     pts_y = torch.linspace(plot_ctx.l_bounds[1], plot_ctx.u_bounds[1], N, device=plot_ctx.device)
 
+    vec_pts_x = torch.linspace(plot_ctx.l_bounds[0], plot_ctx.u_bounds[0], n_width, device=plot_ctx.device)
+    vec_pts_y = torch.linspace(plot_ctx.l_bounds[1], plot_ctx.u_bounds[1], n_heigth, device=plot_ctx.device)
+
     X, Y = torch.meshgrid(pts_x, pts_y)
     X, Y = X.flatten().unsqueeze(1), Y.flatten().unsqueeze(1)
+
+    X_vec, Y_vec = torch.meshgrid(vec_pts_x, vec_pts_y)
+    X_vec, Y_vec = X_vec.flatten().unsqueeze(1), Y_vec.flatten().unsqueeze(1)
+
     inputs = torch.cat((X, Y), dim=1)
+    vec_inputs = torch.cat((X_vec, Y_vec), dim=1)
     directions = []
     norms = []
 
     for function in functions:
-        v = function(inputs)
+        # compute directions
+        v = function(vec_inputs)
         v_x, v_y = v[:, 0:1], v[:, 1:2]
         norm = torch.sqrt(v_x**2 + v_y**2)
-        norms.append(norm.cpu().detach().numpy().reshape((N, N)))
         v_x_unit, v_y_unit = torch.div(v_x, norm), torch.div(v_y, norm)
-        v_x_unit = v_x_unit.cpu().detach().numpy().reshape((N, N))
-        v_y_unit = v_y_unit.cpu().detach().numpy().reshape((N, N))
+        v_x_unit = v_x_unit.cpu().detach().numpy().reshape((n_width, n_width))
+        v_y_unit = v_y_unit.cpu().detach().numpy().reshape((n_heigth, n_heigth))
         directions.append((v_x_unit, v_y_unit))
+
+        # compute norm
+        u = function(inputs)
+        norm = torch.norm(u, p=2, dim=1)
+        norms.append(norm)
 
     X = X.cpu().detach().numpy().reshape((N, N))
     Y = Y.cpu().detach().numpy().reshape((N, N))
+    X_vec = X_vec.cpu().detach().numpy().reshape((n_width, n_width))
+    Y_vec = Y_vec.cpu().detach().numpy().reshape((n_heigth, n_heigth))
 
     fig, ax = plt.subplots(1, len(functions), figsize=plot_ctx.figsize)
 
@@ -103,7 +120,7 @@ def plot_vector_field_2d(functions: List[Function], plot_ctx: PlotContext, N: in
         ax[i].set_ylabel(plot_ctx.y_label, fontsize=plot_ctx.fontsize)
         ax[i].set_title(plot_ctx.titles[i], fontsize=plot_ctx.fontsize)
         v_x_unit, v_y_unit = directions[i]
-        ax[i].quiver(X, Y, v_x_unit, v_y_unit, color='w')
+        ax[i].quiver(X_vec, Y_vec, v_x_unit, v_y_unit, color='w')
 
         for patch in plot_ctx.patches:
             ax[i].add_patch(patch)

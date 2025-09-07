@@ -1,3 +1,20 @@
+# %% [markdown]
+# ## Zadání úlohy:
+# 
+# V této úloze použijeme PINN pro model situace nahřívání desky v jednom bodě (například pomocí laseru):
+# 
+# $$\begin{gather*}
+#     \frac{\partial u(x,\,y,\,t)}{\partial t} = \alpha^2 \cdot \Delta u(x,\,y,\,t) + h(x, y, t), \quad t\in[0, t_0]\\
+#     \frac{\partial u}{\partial n} = 0 \quad \text{ na } \partial \Omega
+# \end{gather*}$$
+# 
+# kde $\Omega = \{ (x, y) \in \mathbb{R}^2: |x| \leq 1 \land |y| \leq 1\}$, a
+# $$\begin{equation*}
+#     h(x, y, t) := 5 \exp{-100 * (x^2 + y^2)}
+# \end{equation*}$$
+
+
+# %%
 # prvotni import
 
 from typing import List
@@ -29,14 +46,18 @@ T_0 = 10.0
 l_bounds = [-1.0, -1.0, 0.0]  # lower bounds of the cube domain
 u_bounds = [1.0, 1.0, T_0]
 
+# trenovaci parametry
+NAIVE_EPOCHS_ADAM = 1
+NAIVE_EPOCHS_LBFGS = 1
+CURRICULUM_EPOCHS_ADAM = 1
+CURRICULUM_EPOCHS_LBFGS = 1
+INTERIOR_SAMPLE_POINTS = 20_000
+BOUNDARY_SAMPLE_POINTS = 1000
+CENTER_SAMPLE_POINTS = 5000
+SAVE_PATH = '../results/'
+
 def heat_in(x: torch.Tensor) -> torch.Tensor:
     return C * torch.exp(-A * (x[:, 0:1]**2 + x[:, 1:2]**2))
-
-def heat_loss(x: torch.Tensor) -> torch.Tensor:
-    return 0
-
-def init_temp(x: torch.Tensor) -> torch.Tensor:
-    return 0
 
 # %%
 # definice ztratovych funkci
@@ -103,35 +124,32 @@ def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain):
 model_naive_ctx = mm.ModelContext(
     input_dim=3,
     output_dim=1,
-    layer=[32, 32, 32, 32],
+    layer=[64, 64, 64, 64],
     l_bounds=l_bounds,
     u_bounds=u_bounds,
-    last_layer_activation='tanh',
-    fourier_features=False,
-    fourier_frequencies=10,
-    fourier_scale=1.0
+    last_layer_activation='tanh'
 )
 
 model_naive = mm.MLPModel(model_naive_ctx).to(device)
 
 model_curriculum = mm.MLPModel(model_naive_ctx).to(device)
 
-optimizer_naive = torch.optim.Adam(model_naive.parameters(), lr=5e-5)
-optimizer_curriculum = torch.optim.Adam(model_curriculum.parameters(), lr=5e-3)
+optimizer_naive = torch.optim.Adam(model_naive.parameters(), lr=1e-3)
+optimizer_curriculum = torch.optim.Adam(model_curriculum.parameters(), lr=1e-3)
 
-scheduler_naive = ReduceLROnPlateau(optimizer_naive, mode='min', factor=0.75, patience=200, verbose=True)
-scheduler_curriculum = ReduceLROnPlateau(optimizer_curriculum, mode='min', factor=0.5, patience=100, verbose=True)
+scheduler_naive = ReduceLROnPlateau(optimizer_naive, factor=0.75, patience=300)
+scheduler_curriculum = ReduceLROnPlateau(optimizer_curriculum, factor=0.5, patience=100)
 
 # %%
 cube_ctx = cb.CubeContext(
     l_bounds=l_bounds,
     u_bounds=u_bounds,
-    N_int=20_000,
-    N_sides=[[100, 100], [100, 100], [100, 100]],
+    N_int=INTERIOR_SAMPLE_POINTS,
+    N_sides=3 * [[BOUNDARY_SAMPLE_POINTS, BOUNDARY_SAMPLE_POINTS]],
     dim=3,
     device=device,
     int_sampling='Biased',
-    bias_pts=[(torch.tensor([0, 0], device=device), 1000, 0.4)]
+    bias_pts=[(torch.tensor([0, 0], device=device), CENTER_SAMPLE_POINTS, 0.4)],
 )
 
 domain = cb.CubeDomain(cube_ctx)
@@ -143,13 +161,15 @@ train_naive_ctx = train.TrainingContext(
     domain=domain,
     loss_fn=loss_fn,
     optimizer=optimizer_naive,
-    epochs=1,
-    resample_freq=2000,
-    resample=True
+    epochs=NAIVE_EPOCHS_ADAM,
+    resample_freq=100,
+    resample=True,
+    scheduler=scheduler_naive,
+    monitor_lr=True
 )
 
 domain.generate_points()
-naive_loss_vals, _ = train.train_switch_to_lbfgs(train_naive_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
+naive_loss_vals, naive_loss_vals_per_comp = train.train_switch_to_lbfgs(train_naive_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=NAIVE_EPOCHS_LBFGS)
 
 # %%
 # Dale zkusime curriculum strategii
@@ -159,8 +179,8 @@ tratin_curriculum_ctx = train.TrainingContext(
     domain=domain,
     loss_fn=loss_fn,
     optimizer=optimizer_curriculum,
-    epochs=1,
-    resample_freq=1_000,
+    epochs=CURRICULUM_EPOCHS_ADAM,
+    scheduler=None    
 )
 
 
@@ -168,7 +188,7 @@ tratin_curriculum_ctx = train.TrainingContext(
 domain.ctx.l_bounds = [-1.0, -1.0, 0.0]
 domain.ctx.u_bounds = [1.0, 1.0, 1.0]
 first_iteration = True
-curriculum_loss_vals, _ = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
+total_curr_loss, _ = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=CURRICULUM_EPOCHS_LBFGS)
 
 DELTA_TS = [2.0, 3.0, 4.0, 5.0]
 for delta_t in DELTA_TS:
@@ -178,8 +198,8 @@ for delta_t in DELTA_TS:
     # nastaveni nove pocatecni podminky
 
     # trenovani v novem casovem useku
-    new_curr_losses, _ = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=1)
-    curriculum_loss_vals += new_curr_losses
+    new_total_curr_loss, _ = train.train_switch_to_lbfgs(tratin_curriculum_ctx, lbfgs_lr=0.1, epochs_with_lbfgs=CURRICULUM_EPOCHS_LBFGS)
+    total_curr_loss += new_total_curr_loss
 
 # %%
 plot_ctx = utils.PlotContext(
@@ -193,35 +213,49 @@ plot_ctx = utils.PlotContext(
     N=100,
     x_label="Epochs",
     y_label="Loss",
+    titles=["Total loss"],
     save_img=True,
-    save_path='../results/total_loss.png',
-    titles=["Total losses"]
+    save_path=SAVE_PATH + 'loss.png'
 )
 
-utils.plot_loss_values({'curriculum loss': curriculum_loss_vals, 'Naive loss': naive_loss_vals}, plot_ctx)
-utils.plot_loss_values({}, plot_ctx)
+utils.plot_loss_values({'curriculum loss': total_curr_loss, 'Naive loss': naive_loss_vals}, plot_ctx)
 
 # %%
 # vykresleni vysledku
 
-TIME = 0
+t = 0
+plot_ctx.figsize = (18, 6)
 
 def s2s_u_t(input: torch.Tensor) -> torch.Tensor:
-    time = torch.full_like(input[:, 0:1], TIME, device=device)
+    time = torch.full_like(input[:, 0:1], t, device=device)
     return model_curriculum(torch.cat((input, time), dim=1))
 
 def naive_u_t(input: torch.Tensor) -> torch.Tensor:
-    time = torch.full_like(input[:, 0:1], TIME, device=device)
+    time = torch.full_like(input[:, 0:1], t, device=device)
     return model_naive(torch.cat((input, time), dim=1))
 
-plot_ctx.function_names = ['u']
+plot_ctx.function_names = ['u', 'u']
 
-for TIME in [0.0, 1, 2, 3, 4, 5]:
-    plot_ctx.save_path = f'../results/curr_t={TIME}.png'
-    plot_ctx.titles = [f"Curriculum temperature at t={TIME} s"]
-    utils.plot_function_on_2d_cube([s2s_u_t], plot_ctx)
+for t in [0.0, 1, 2, 3, 4, 5]:
+    plot_ctx.titles = [f"Curriculum temperature at t={t} s", f"Naive temperature at t={t} s"]
+    plot_ctx.save_path = SAVE_PATH + f'temp_at_t_{t}.png'
+    utils.plot_function_on_2d_cube([s2s_u_t, naive_u_t], plot_ctx)
 
-for TIME in [0.0, 1, 2, 3, 4, 5]:
-    plot_ctx.save_path = f'../results/naive_t={TIME}.png'
-    plot_ctx.titles = [f"Naive temperature at t={TIME} s"]
-    utils.plot_function_on_2d_cube([naive_u_t], plot_ctx)
+# %%
+def residual_at(input: torch.Tensor, time: float, model: torch.nn.Module) -> torch.Tensor:
+    time_tensor = torch.full((input.shape[0], 1), time, device=device)
+    full_input = torch.cat([input, time_tensor], dim=1).requires_grad_(True)
+
+    res = compute_residuum(full_input, model=model)
+    return torch.abs(res)
+
+plot_ctx.vmin=0
+plot_ctx.vmax = 0.01
+
+for t in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]:
+    plot_ctx.save_path = SAVE_PATH + f'residuum_at_t_{t}.png'
+    plot_ctx.titles = [f"Curriculum resudials at t={t} s", f"Naive residuals at t={t} s"]
+    utils.plot_function_on_2d_cube([lambda x: residual_at(x, t, model_curriculum),
+                                    lambda x: residual_at(x, t, model_naive)], plot_ctx)
+
+

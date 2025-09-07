@@ -10,9 +10,9 @@ class Sinn(nn.Module):
         return torch.sin(x)
 
 
-class FourierFeature(nn.Module):
+class FourierFeatureTimeless(nn.Module):
     def __init__(self, input_dim: int, frequencies: int, scale: float = 10.0):
-        super(FourierFeature, self).__init__()
+        super(FourierFeatureTimeless, self).__init__()
 
         B = torch.randn((input_dim, frequencies)) * scale
 
@@ -23,6 +23,19 @@ class FourierFeature(nn.Module):
         return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
 
 
+class FourierFeature(nn.Module):
+    def __init__(self, input_dim: int, frequencies: int, scale: float = 10.0):
+        super(FourierFeature, self).__init__()
+
+        B = torch.randn((input_dim - 1, frequencies)) * scale
+
+        self.register_buffer('B', B)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = tau * x[:, :-1] @ self.B
+        return torch.cat([torch.cos(x), torch.sin(x), x[:, -1:]], dim=-1)
+
+
 @dataclass
 class ModelContext:
     input_dim: int
@@ -31,7 +44,7 @@ class ModelContext:
     u_bounds: List[float]
     l_bounds: List[float]
     last_layer_activation: str = 'tanh'
-    fourier_features: bool = False
+    fourier_features: str = ''
     fourier_frequencies: int = 10
     fourier_scale: float = 10.0
 
@@ -44,9 +57,12 @@ class MLPModel(nn.Module):
         self.fourier_features = ctx.fourier_features
         layers = []
 
-        if self.fourier_features:
-            layers.append(FourierFeature(ctx.input_dim, ctx.fourier_frequencies, ctx.fourier_scale))
+        if self.fourier_features == 'Timeless':
+            layers.append(FourierFeatureTimeless(ctx.input_dim, ctx.fourier_frequencies, ctx.fourier_scale))
             layers.append(nn.Linear(2 * ctx.fourier_frequencies, ctx.layer[0]))
+        elif self.fourier_features == 'Timedep':
+            layers.append(FourierFeature(ctx.input_dim, ctx.fourier_frequencies, ctx.fourier_scale))
+            layers.append(nn.Linear(2 * ctx.fourier_frequencies + 1, ctx.layer[0]))
         else:
             layers.append(nn.Linear(ctx.input_dim, ctx.layer[0]))
 

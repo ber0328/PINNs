@@ -17,14 +17,9 @@
 # %%
 # prvotni import
 
-from typing import List
 import torch
 from torch.autograd import grad
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-import sys
-from numpy import pi
-import matplotlib.pyplot as plt
-sys.path.append('..')
 
 # %%
 # vlastni import
@@ -32,11 +27,9 @@ from src import train, utils
 from src import calculus as calc
 import src.data.cube_domain as cb
 import src.models.mlp_model as mm
-
 # %%
 # volba device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 # %%
 # definice ulohy
 ALPHA = 114e-4  # diffusivity constant
@@ -47,17 +40,23 @@ l_bounds = [-1.0, -1.0, 0.0]  # lower bounds of the cube domain
 u_bounds = [1.0, 1.0, T_0]
 
 # trenovaci parametry
-NAIVE_EPOCHS_ADAM = 1
-NAIVE_EPOCHS_LBFGS = 1
-CURRICULUM_EPOCHS_ADAM = 1
-CURRICULUM_EPOCHS_LBFGS = 1
-INTERIOR_SAMPLE_POINTS = 20_000
-BOUNDARY_SAMPLE_POINTS = 1000
-CENTER_SAMPLE_POINTS = 5000
-SAVE_PATH = '../results/'
+NAIVE_EPOCHS_ADAM = 10_000
+NAIVE_EPOCHS_LBFGS = 500
+CURRICULUM_EPOCHS_ADAM = 1_500
+CURRICULUM_EPOCHS_LBFGS = 500
+INTERIOR_SAMPLE_POINTS = 10_000
+BOUNDARY_SAMPLE_POINTS = 100
+CENTER_SAMPLE_POINTS = 1_000
+SAVE_PATH = './results/'
+
 
 def heat_in(x: torch.Tensor) -> torch.Tensor:
     return C * torch.exp(-A * (x[:, 0:1]**2 + x[:, 1:2]**2))
+
+
+def init_temp(x: torch.Tensor) -> torch.Tensor:
+    return 0
+
 
 # %%
 # definice ztratovych funkci
@@ -105,16 +104,16 @@ def loss_fn(model: torch.nn.Module, domain: cb.CubeDomain):
     # neumann ztrata
     # leva hranice
     input_left = domain.sides[0][0].requires_grad_(True)
-    loss_neumann_left = neumann_bounday(input_left, model, normal=torch.tensor([-1.0, 0.0],device=device,requires_grad=True))
+    loss_neumann_left = neumann_bounday(input_left, model, normal=torch.tensor([-1.0, 0.0], device=device, requires_grad=True))
     # prava hranice
     input_right = domain.sides[0][1].requires_grad_(True)
-    loss_neumann_right = neumann_bounday(input_right, model, normal=torch.tensor([1.0, 0.0],device=device,requires_grad=True))
+    loss_neumann_right = neumann_bounday(input_right, model, normal=torch.tensor([1.0, 0.0], device=device, requires_grad=True))
     # horni hranice
     input_top = domain.sides[1][0].requires_grad_(True)
-    loss_neumann_top = neumann_bounday(input_top, model, normal=torch.tensor([0.0, 1.0],device=device,requires_grad=True))
+    loss_neumann_top = neumann_bounday(input_top, model, normal=torch.tensor([0.0, 1.0], device=device, requires_grad=True))
     # dolni hranice
     input_bottom = domain.sides[1][1].requires_grad_(True)
-    loss_neumann_bottom = neumann_bounday(input_bottom, model, normal=torch.tensor([0.0, -1.0],device=device,requires_grad=True))
+    loss_neumann_bottom = neumann_bounday(input_bottom, model, normal=torch.tensor([0.0, -1.0], device=device, requires_grad=True))
 
     side_loss = loss_neumann_left + loss_neumann_right + loss_neumann_top + loss_neumann_bottom
 
@@ -180,7 +179,7 @@ tratin_curriculum_ctx = train.TrainingContext(
     loss_fn=loss_fn,
     optimizer=optimizer_curriculum,
     epochs=CURRICULUM_EPOCHS_ADAM,
-    scheduler=None    
+    scheduler=None
 )
 
 

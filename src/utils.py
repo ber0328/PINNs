@@ -46,7 +46,7 @@ def plot_points(pts_list: Dict[str, torch.Tensor], title="") -> None:
 
 
 def plot_loss_values(loss_values: Dict[str, List[float]], plot_ctx: PlotContext) -> None:
-    _, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=(6, 4))
 
     for label, values in loss_values.items():
         n = range(len(values))
@@ -63,7 +63,7 @@ def plot_loss_values(loss_values: Dict[str, List[float]], plot_ctx: PlotContext)
     ax.legend()
 
     if plot_ctx.save_img:
-        plt.savefig(plot_ctx.save_path)
+        fig.savefig(plot_ctx.save_path)
     else:
         plt.show()
 
@@ -126,7 +126,7 @@ def plot_vector_field_2d(functions: List[Function], plot_ctx: PlotContext,
             ax[i].add_patch(patch)
 
     if plot_ctx.save_img:
-        plt.savefig(plot_ctx.save_path)
+        fig.savefig(plot_ctx.save_path)
     else:
         plt.show()
 
@@ -164,6 +164,6 @@ def plot_function_on_2d_cube(functions: List[Function], plot_ctx: PlotContext):
             ax[i].add_patch(patch)
 
     if plot_ctx.save_img:
-        plt.savefig(plot_ctx.save_path)
+        fig.savefig(plot_ctx.save_path)
     else:
         plt.show()

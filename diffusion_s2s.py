@@ -14,7 +14,6 @@ from src.models.mlp_model import MLPModel
 # definice device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 class ModelTimePair:
     def __init__(self, models: List, time_stamps: List):
         self.models = models

@@ -71,7 +71,6 @@ class CubeDomain(AbstractDomain):
     def _gen_int_pts(self):
         u_bound = torch.tensor(self.ctx.u_bounds, device=self.ctx.device)
         l_bound = torch.tensor(self.ctx.l_bounds, device=self.ctx.device)
-
         if self.ctx.int_sampling == 'Uniform':
             return (u_bound - l_bound) * torch.rand((self.ctx.N_int, self.ctx.dim), device=self.ctx.device) + l_bound
         elif self.ctx.int_sampling == 'Biased':

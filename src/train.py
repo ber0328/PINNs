@@ -8,7 +8,7 @@ from torch.optim import Optimizer
 from torch import Tensor
 import torch
 import torch.optim as opt
-from typing import List, Callable
+from typing import List, Callable, Tuple
 from torch.optim.lr_scheduler import _LRScheduler
 from dataclasses import dataclass
 
@@ -33,7 +33,7 @@ class TrainingContext:
     reinit_loss: Callable = None
 
 
-def simple_train(ctx: TrainingContext) -> List:
+def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
     """
     Jednoduchy trenovaci algoritmus, ktery generuje nahodna data v kazde
     epose.
@@ -85,7 +85,7 @@ def train_switch_to_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=500,
                           lbfgs_lr=1e-3, max_iter=20, history_size=10) -> List:
     total_loss_values, component_loss_values = simple_train(ctx)
 
-    def closure():
+    def closure() -> torch.Tensor:
         optimizer.zero_grad()
         loss_components = ctx.loss_fn(ctx.model, ctx.domain)
         loss = sum(loss_components)
@@ -101,8 +101,7 @@ def train_switch_to_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=500,
         loss = optimizer.step(closure)
 
         if ctx.resample and epoch % 100 == 99:
-            if ctx.resample:
-                ctx.domain.generate_points()
+            ctx.domain.generate_points()
 
             print(f"Loss at lbfgs-epoch {epoch + 1} is: {loss.item()}")
             # Konvence: loss_values[0] obsahuje totalni ztratu

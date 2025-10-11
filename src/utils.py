@@ -93,19 +93,19 @@ def plot_vector_field_2d(functions: List[Function], plot_ctx: PlotContext,
         v_x, v_y = v[:, 0:1], v[:, 1:2]
         norm = torch.sqrt(v_x**2 + v_y**2)
         v_x_unit, v_y_unit = torch.div(v_x, norm), torch.div(v_y, norm)
-        v_x_unit = v_x_unit.cpu().detach().numpy().reshape((n_width, n_width))
-        v_y_unit = v_y_unit.cpu().detach().numpy().reshape((n_heigth, n_heigth))
+        v_x_unit = v_x_unit.cpu().detach().numpy().reshape((n_width, n_heigth))
+        v_y_unit = v_y_unit.cpu().detach().numpy().reshape((n_width, n_heigth))
         directions.append((v_x_unit, v_y_unit))
 
         # compute norm
         u = function(inputs)
         norm = torch.norm(u, p=2, dim=1)
-        norms.append(norm)
+        norms.append(norm.cpu().detach().numpy().reshape((N, N)))
 
     X = X.cpu().detach().numpy().reshape((N, N))
     Y = Y.cpu().detach().numpy().reshape((N, N))
-    X_vec = X_vec.cpu().detach().numpy().reshape((n_width, n_width))
-    Y_vec = Y_vec.cpu().detach().numpy().reshape((n_heigth, n_heigth))
+    X_vec = X_vec.cpu().detach().numpy().reshape((n_width, n_heigth))
+    Y_vec = Y_vec.cpu().detach().numpy().reshape((n_width, n_heigth))
 
     fig, ax = plt.subplots(1, len(functions), figsize=plot_ctx.figsize)
 

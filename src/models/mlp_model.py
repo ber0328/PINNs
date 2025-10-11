@@ -47,6 +47,7 @@ class ModelContext:
     fourier_features: str = ''
     fourier_frequencies: int = 10
     fourier_scale: float = 10.0
+    normalize: bool = True
 
 
 class MLPModel(nn.Module):
@@ -55,6 +56,7 @@ class MLPModel(nn.Module):
         self.u_bounds = torch.tensor(ctx.u_bounds)
         self.l_bounds = torch.tensor(ctx.l_bounds)
         self.fourier_features = ctx.fourier_features
+        self.normalize = ctx.normalize
         layers = []
 
         if self.fourier_features == 'Timeless':
@@ -83,9 +85,10 @@ class MLPModel(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # normalize for (1, -1)
-        x = x - self.l_bounds
-        x = x / (self.u_bounds - self.l_bounds)
-        x = 2 * x - 1
+        if self.normalize:
+            x = x - self.l_bounds
+            x = x / (self.u_bounds - self.l_bounds)
+            x = 2 * x - 1
 
         return self.network(x)
 

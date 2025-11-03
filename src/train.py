@@ -103,6 +103,7 @@ def train_switch_to_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=500,
         if ctx.resample and epoch % 100 == 99:
             ctx.domain.generate_points()
 
+        if epoch % 100 == 99:
             print(f"Loss at lbfgs-epoch {epoch + 1} is: {loss.item()}")
             # Konvence: loss_values[0] obsahuje totalni ztratu
             total_loss_values.append(loss.item())

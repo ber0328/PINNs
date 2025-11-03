@@ -91,6 +91,8 @@ class CubeDomain(AbstractDomain):
             sample = sampler.random(self.ctx.N_int)
             sample = qmc.scale(sample, self.ctx.l_bounds, self.ctx.u_bounds)
             return torch.from_numpy(sample).to(self.ctx.device).float()
+        elif self.ctx.int_sampling == 'Mesh':
+            return self._gen_mesh()
 
     def _gen_side(self, i: int) -> Tuple[torch.Tensor, torch.Tensor]:
         u_bound = torch.tensor(self.ctx.u_bounds, device=self.ctx.device)

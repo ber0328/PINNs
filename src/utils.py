@@ -1,6 +1,5 @@
 from torch import no_grad, Tensor
 from src.data.abstract_domain import AbstractDomain
-from src.data.cube_domain import CubeContext
 import matplotlib.pyplot as plt
 from typing import Callable, List, Tuple, Dict
 from scipy.interpolate import griddata

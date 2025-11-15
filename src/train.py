@@ -120,7 +120,7 @@ def train_with_lbfgs(ctx: TrainingContext) -> List:
         loss.backward()
         return loss
 
-    optimizer = opt.LBFGS(ctx.model.parameters(), lr=0.001)
+    optimizer = opt.LBFGS(ctx.model.parameters(), lr=0.001, line_search_fn=1)
 
     for epoch in range(ctx.epochs):
         loss = optimizer.step(closure)

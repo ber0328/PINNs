@@ -11,6 +11,9 @@ import torch.optim as opt
 from typing import List, Callable, Tuple
 from torch.optim.lr_scheduler import _LRScheduler
 from dataclasses import dataclass
+from torch.amp.grad_scaler import GradScaler
+from torch.amp.autocast_mode import autocast
+
 
 
 LOSS_FN = Callable[[Module, AbstractDomain], Tensor]
@@ -40,6 +43,7 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
     """
     component_loss_values = [[] for _ in range(len(ctx.loss_fn(ctx.model, ctx.domain)))]
     total_loss_values = []
+    scaler = GradScaler()
 
     for epoch in range(ctx.epochs):
         ctx.optimizer.zero_grad()
@@ -47,13 +51,14 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
         if ctx.resample and epoch % ctx.resample_freq == 0:
             ctx.domain.generate_points()
 
-        loss_components = ctx.loss_fn(ctx.model, ctx.domain)
-        loss = sum(loss_components)
-        loss.backward()
-        ctx.optimizer.step()
-
+        with autocast(device_type='cuda'):
+            loss_components = ctx.loss_fn(ctx.model, ctx.domain)
+            loss = sum(loss_components)
+            
+        scaler.scale(loss).backward()
+        
         if not (ctx.scheduler is None):
-            ctx.scheduler.step(loss)
+            ctx.scheduler.step(loss.item())
 
         if epoch % 100 == 99 or epoch == 0:
             print(f"Loss at epoch {epoch + 1} is: {loss.item()}.", end=' ')
@@ -64,6 +69,7 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
             total_loss_values.append(loss.item())
 
             if ctx.monitor_gradient:
+                scaler.unscale_(ctx.optimizer)
                 total_norm = 0.0
                 for p in ctx.model.parameters():
                     if p.grad is not None:
@@ -76,6 +82,9 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
                 print(f"Current learing rate: {ctx.optimizer.param_groups[0]['lr']}", end=' ')
 
             print()
+        
+        scaler.step(ctx.optimizer)
+        scaler.update()
 
     return total_loss_values, component_loss_values
 

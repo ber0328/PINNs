@@ -5,6 +5,10 @@ from math import tau
 from dataclasses import dataclass
 
 
+def out_decorator(func, modify=False):
+    return func
+
+
 class Sinn(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return torch.sin(x)
@@ -87,17 +91,19 @@ class MLPModel(nn.Module):
         self.network = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_temp = x
+        
         if self.normalize:
             x = x - self.l_bounds
             x = x / (self.u_bounds - self.l_bounds)
             x = 2 * x - 1
+        
+        out = self.network(x)
 
         if self.ctx.hard_enforce_boundary:
-            out = self.network(x)
-            
-            return self.ctx.decorator(x, out)
+            return self.ctx.decorator(x_temp, out)
         else:
-            return self.network(x)
+            return out
 
     def to(self, device):
         super(MLPModel, self).to(device)

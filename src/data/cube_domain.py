@@ -45,7 +45,7 @@ class CubeDomain(AbstractDomain):
             int_rand = self._gen_int_pts().requires_grad_(True)
             self.interior = torch.cat((worst, int_rand), dim=1)
         else:
-            self.interior = self._gen_int_pts()
+            self.interior = self._gen_int_pts().requires_grad_(True)
 
     def get_all_points(self):
         points = self.interior

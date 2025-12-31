@@ -40,6 +40,18 @@ class FourierFeature(nn.Module):
         return torch.cat([torch.cos(x), torch.sin(x), x[:, -1:]], dim=-1)
 
 
+class HalfDiscontinuous(nn.Module):
+    def __init__(self, division_point: int):
+        super(HalfDiscontinuous, self).__init__()
+        self.division_point = division_point
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_disc = torch.where(x[:self.division_point] < 0.0, 1.0, 0.0)
+        x_cts = torch.tanh(x[self.division_point:])
+        
+        return torch.cat([x_disc, x_cts], dim=0)
+
+
 @dataclass
 class ModelContext:
     input_dim: int
@@ -54,6 +66,8 @@ class ModelContext:
     normalize: bool = True
     hard_enforce_boundary: bool = False
     decorator: callable = None
+    has_discontinuity: bool = False
+    disc_steepeness: float = 8.0
 
 
 class MLPModel(nn.Module):
@@ -64,6 +78,7 @@ class MLPModel(nn.Module):
         self.fourier_features = ctx.fourier_features
         self.normalize = ctx.normalize
         self.ctx = ctx
+        self.k = ctx.disc_steepeness
         layers = []
 
         if self.fourier_features == 'Timeless':
@@ -77,17 +92,23 @@ class MLPModel(nn.Module):
 
         previous_dim = ctx.layer[0]
 
-        for dim in ctx.layer:
-            layers.append(nn.Tanh())
+        for i, dim in enumerate(ctx.layer):
+            if ctx.has_discontinuity and i == len(ctx.layer) - 2:
+                layers.append(HalfDiscontinuous(dim // 2))
+            else:
+                layers.append(nn.Tanh())
             layers.append(nn.Linear(previous_dim, dim))
             previous_dim = dim
 
         if ctx.last_layer_activation == 'sinn':
             layers.append(Sinn())
+        elif ctx.last_layer_activation == 'disc':
+            layers.append(HalfDiscontinuous(ctx.layer[-1]//2))
         else:
             layers.append(nn.Tanh())
 
-        layers.append(nn.Linear(previous_dim, ctx.output_dim))
+        final_out_dim = ctx.output_dim * 3 if ctx.has_discontinuity else ctx.output_dim
+        layers.append(nn.Linear(previous_dim, final_out_dim))
         self.network = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -100,10 +121,20 @@ class MLPModel(nn.Module):
         
         out = self.network(x)
 
+        if self.ctx.has_discontinuity:
+            od = self.ctx.output_dim
+            base = out[:, :od]
+            jump = out[:, od:2*od]
+            phi = out[:, 2*od:3*od]
+            
+            k = self.k if self.k is not None else 8.0
+            H = 0.5 * (1.0 + torch.tanh(k * phi))
+            out = base + jump * H
+
         if self.ctx.hard_enforce_boundary:
-            return self.ctx.decorator(x_temp, out)
-        else:
-            return out
+            out = self.ctx.decorator(x_temp, out)
+        
+        return out
 
     def to(self, device):
         super(MLPModel, self).to(device)

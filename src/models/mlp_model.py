@@ -41,15 +41,16 @@ class FourierFeature(nn.Module):
 
 
 class HalfDiscontinuous(nn.Module):
-    def __init__(self, division_point: int):
+    def __init__(self, eps, division_point: int):
         super(HalfDiscontinuous, self).__init__()
         self.division_point = division_point
+        self.eps = eps
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x_disc = torch.where(x[:self.division_point] < 0.0, 1.0, 0.0)
-        x_cts = torch.tanh(x[self.division_point:])
+        heaviside = torch.where(x[:self.division_point] < 0.0, 1.0, 0.0)
+        heaviside = torch.cat([heaviside, torch.zeros_like(x[self.division_point:])])
         
-        return torch.cat([x_disc, x_cts], dim=0)
+        return torch.tanh(x) + self.eps * heaviside
 
 
 @dataclass
@@ -68,6 +69,7 @@ class ModelContext:
     decorator: callable = None
     has_discontinuity: bool = False
     disc_steepeness: float = 8.0
+    disc_eps: float = 0.0
 
 
 class MLPModel(nn.Module):
@@ -103,7 +105,7 @@ class MLPModel(nn.Module):
         if ctx.last_layer_activation == 'sinn':
             layers.append(Sinn())
         elif ctx.last_layer_activation == 'disc':
-            layers.append(HalfDiscontinuous(ctx.layer[-1]//2))
+            layers.append(HalfDiscontinuous(ctx.disc_eps, ctx.layer[-1]))
         else:
             layers.append(nn.Tanh())
 

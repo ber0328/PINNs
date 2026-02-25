@@ -7,11 +7,11 @@ from scipy.stats import qmc
 
 @dataclass
 class CubeContext:
-    l_bounds: List
-    u_bounds: List
     dim: int
     N_int: int
     N_sides: List[Tuple]
+    l_bounds: Tuple = ()
+    u_bounds: Tuple = ()
     device: str = 'cpu'
     mirror_left_right: List = None
     bnd_sampling: str = 'Uniform'
@@ -97,7 +97,7 @@ class CubeDomain(AbstractDomain):
     def _gen_side(self, i: int) -> Tuple[torch.Tensor, torch.Tensor]:
         u_bound = torch.tensor(self.ctx.u_bounds, device=self.ctx.device)
         l_bound = torch.tensor(self.ctx.l_bounds, device=self.ctx.device)
-
+        
         N_left, N_right = self.ctx.N_sides[i]
         pts_left = self._gen_rand_bnd_tensor(u_bound, l_bound, (N_left, self.ctx.dim))
 

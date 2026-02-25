@@ -62,7 +62,7 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
 
         if epoch % 100 == 99 or epoch == 0:
             print(f"Loss at epoch {epoch + 1} is: {loss.item()}.", end=' ')
-
+                
             for i, loss_component in enumerate(loss_components):
                 component_loss_values[i].append(loss_component.item())
 

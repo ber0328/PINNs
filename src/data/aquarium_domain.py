@@ -18,7 +18,7 @@ class AquariumDomain(cb.CubeDomain):
     def generate_points(self):
         super().generate_points()
         self.ball_boundary = self._gen_rand_ball_bnd()
-        self.interior = self._select_pts_outside()
+        self.interior = self._select_pts_outside().detach()
 
     def get_all_points(self):
         square_pts = super().get_all_points()

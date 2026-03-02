@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import List, Tuple
 from dataclasses import dataclass
-from src.models.modules import Normalize, Sinn, Heavyside, FourierFeature
+from src.models.modules import HalfHeavyside, Normalize, Sinn, DiscTanh, FourierFeature
 
 
 @dataclass
@@ -51,7 +51,7 @@ class MLPModel(nn.Module):
 
         for i, dim in enumerate(ctx.layer):
             if i == len(ctx.layer) - 1 and ctx.has_discontinuity:
-                layers.append(Heavyside(previous_dim, steepness=ctx.disc_steepness))
+                layers.append(DiscTanh(previous_dim))
             else:
                 layers.append(nn.Tanh())
 
@@ -61,7 +61,9 @@ class MLPModel(nn.Module):
         if ctx.last_layer_activation == 'sinn':
             layers.append(Sinn()) 
         elif ctx.last_layer_activation == 'disc':
-            layers.append(Heavyside(previous_dim, steepness=ctx.disc_steepness))
+            layers.append(DiscTanh(previous_dim))
+        elif ctx.last_layer_activation == 'half_disc':
+            layers.append(HalfHeavyside(previous_dim))
         else:
             layers.append(nn.Tanh())
 

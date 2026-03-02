@@ -37,15 +37,35 @@ class FourierFeature(nn.Module):
         return torch.column_stack([torch.cos(x), torch.sin(x), x[:, :self.separator]])
 
 
-class Heavyside(nn.Module):
-    def __init__(self, input_dim: int, steepness=20.0):
-        super(Heavyside, self).__init__()
-        self.jump_size = nn.Parameter(torch.rand(input_dim, dtype=torch.float32))
-        self.jump_centre = nn.Parameter(torch.rand(input_dim, dtype=torch.float32))
-        self.steepness = steepness
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        #heaviside = torch.sigmoid(self.steepness * (x - self.jump_centre))
-        heaviside = torch.where((x - self.jump_centre) > 0, 1.0, 0.0)
+class _STEHeaviside(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x: torch.Tensor) -> torch.Tensor:
+        return (x >= 0).float()
 
+    @staticmethod
+    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
+        return grad_output
+
+
+class DiscTanh(nn.Module):
+    def __init__(self, input_dim: int):
+        super().__init__()
+        self.jump_size   = nn.Parameter(0.2 * (torch.rand(input_dim) - 0.5))
+        self.jump_centre = nn.Parameter(0.2 * (torch.rand(input_dim) - 0.5))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        heaviside = _STEHeaviside.apply(x - self.jump_centre)
         return torch.tanh(x) + self.jump_size * heaviside
+    
+class HalfHeavyside(nn.Module):
+    def __init__(self, input_dim: int):
+        super(HalfHeavyside, self).__init__()
+        self.halfway = input_dim//2
+        self.jump_size = nn.Parameter((torch.rand(self.halfway, dtype=torch.float32) - 0.5))
+        self.jump_centre = nn.Parameter((torch.rand(self.halfway, dtype=torch.float32) - 0.5))
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        heaviside = _STEHeaviside.apply(x[:, :self.halfway] - self.jump_centre)
+
+        out = torch.cat([heaviside, torch.tanh(x[:, self.halfway:])], dim=1)
+        return out

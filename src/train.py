@@ -41,7 +41,7 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
     Jednoduchy trenovaci algoritmus, ktery generuje nahodna data v kazde
     epose.
     """
-    component_loss_values = [[] for _ in range(len(ctx.loss_fn(ctx.model, ctx.domain)))]
+    component_loss_values: List[List] = []
     total_loss_values = []
     scaler = GradScaler()
 
@@ -54,6 +54,9 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
         with autocast(device_type='cuda'):
             loss_components = ctx.loss_fn(ctx.model, ctx.domain)
             loss = sum(loss_components)
+
+        if not component_loss_values:
+            component_loss_values = [[] for _ in range(len(loss_components))]
             
         scaler.scale(loss).backward()
         

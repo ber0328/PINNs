@@ -54,7 +54,8 @@ class DiscTanh(nn.Module):
         self.jump_centre = nn.Parameter(0.2 * (torch.rand(input_dim) - 0.5))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        heaviside = _STEHeaviside.apply(x - self.jump_centre)
+        #heaviside = _STEHeaviside.apply(x - self.jump_centre)
+        heaviside = (x - self.jump_centre >= 0).float()
         return torch.tanh(x) + self.jump_size * heaviside
     
 class HalfHeavyside(nn.Module):
@@ -65,7 +66,7 @@ class HalfHeavyside(nn.Module):
         self.jump_centre = nn.Parameter((torch.rand(self.halfway, dtype=torch.float32) - 0.5))
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        heaviside = _STEHeaviside.apply(x[:, :self.halfway] - self.jump_centre)
-
+        #heaviside = _STEHeaviside.apply(x[:, :self.halfway] - self.jump_centre)
+        heaviside = (x[:, :self.halfway] - self.jump_centre >= 0).float()
         out = torch.cat([heaviside, torch.tanh(x[:, self.halfway:])], dim=1)
         return out

@@ -64,6 +64,8 @@ class MLPModel(nn.Module):
             layers.append(DiscTanh(previous_dim))
         elif ctx.last_layer_activation == 'half_disc':
             layers.append(HalfHeavyside(previous_dim))
+        elif ctx.last_layer_activation == 'relu':
+            layers.append(nn.ReLU())
         else:
             layers.append(nn.Tanh())
 

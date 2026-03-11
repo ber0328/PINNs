@@ -11,15 +11,15 @@ $k(x) = 1$ for $x \in (-\tfrac{1}{3}, \tfrac{1}{3})$, $k(x) = 10$ otherwise.
 
 | Model | $\|v + k\,u_x\|_{L^2}$ | $\|v_x\|_{L^2}$ |
 |---|---|---|
-| Expert (per-char) | `7.809559e-02` | `7.516836e-04` |
-| Naive (MLP)       | `7.635526e-02` | `4.733646e-04` |
+| Expert (per-char) | `9.803084e-02` | `2.646687e-03` |
+| Naive (MLP)       | `8.247618e-02` | `2.277828e-03` |
 
 ## Max parameter drift $\max|\Delta\theta|$
 
 | Model | $\max\|\Delta\theta\|$ |
 |---|---|
-| Expert | `4.544174e+00` |
-| Naive  | `4.109392e+00` |
+| Expert | `1.281461e+00` |
+| Naive  | `1.790035e+00` |
 
 ---
 

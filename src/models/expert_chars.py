@@ -8,7 +8,7 @@ import torch
 @dataclass
 class PerCharCtx:
     input_dim: int
-    output_dims: List[int]
+    output_dim: int
 
     hidden_layers_per_output: List[List[int]]
     char_functions: List
@@ -29,7 +29,7 @@ class PerCharModel(nn.Module):
         self.g_1 = self.ctx.constraint_functions[1] if self.ctx.hard_enforce else None
 
         sequentials_main = []
-        for i, output_dim in enumerate(self.ctx.output_dims):
+        for i, _ in enumerate(self.ctx.char_functions):
             sequential_main = []
 
             prev_dim = self.ctx.hidden_layers_per_output[i][0]
@@ -44,21 +44,22 @@ class PerCharModel(nn.Module):
                 sequential_main.append(nn.Linear(prev_dim, layer_dim))
                 
             sequential_main.append(nn.Tanh())
-            sequential_main.append(nn.Linear(prev_dim, output_dim))
+            sequential_main.append(nn.Linear(prev_dim, self.ctx.output_dim))
             
             sequentials_main.append(nn.Sequential(*sequential_main))
 
         self.experts = nn.ModuleList(sequentials_main)
 
     def forward(self, x: Tensor) -> Tensor:
-        out = torch.cat([ex(x) for ex in self.experts], dim=1)   # (N, num_experts)
-        chars = torch.cat([chi(x) for chi in self.ctx.char_functions], dim=1)  # (N, num_experts)
+        outs = [ex(x) for ex in self.experts]
+        chars = [chi(x) for chi in self.ctx.char_functions]
 
-        out = torch.sum(torch.column_stack([out[:, 0], out[0:] * chars]), dim=1, keepdim=True)  # (N, 1)
+        out = sum([chars[i] * outs[i] for i in range(len(outs))])
 
         if self.g_0 is not None and self.g_1 is not None:
+           # print(self.g_0(x).shape, self.g_1(x).shape, (out).shape)
             out = self.g_0(x) + self.g_1(x) * out
-
+            
         return out
 
     def to(self, device):

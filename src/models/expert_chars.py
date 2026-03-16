@@ -57,7 +57,6 @@ class PerCharModel(nn.Module):
         out = sum([chars[i] * outs[i] for i in range(len(outs))])
 
         if self.g_0 is not None and self.g_1 is not None:
-           # print(self.g_0(x).shape, self.g_1(x).shape, (out).shape)
             out = self.g_0(x) + self.g_1(x) * out
             
         return out

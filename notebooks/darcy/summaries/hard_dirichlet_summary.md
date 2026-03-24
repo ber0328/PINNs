@@ -4,6 +4,16 @@
 
 ---
 
+## TL;DR
+
+- We solve mixed-form Darcy flow with a circular permeability jump ($k=1$ inside, $k=2$ outside) using hard-enforced boundary conditions.
+- Three models are compared: expert-gated (`combined_exp`), discontinuous-activation (`combined_disc`), and smooth baseline (`combined_smooth`).
+- The expert-gated model achieves the best PDE residual quality near the interface and the lowest Darcy-law $L^2$ residual.
+- The smooth baseline remains competitive on FEM pressure error, while the discontinuous-activation model is harder to optimize.
+- Main takeaway: characteristic-gated experts, while better at minimizing PDE residual, struggle to capture true nature of the PDE solution, performing even worse than the smooth baseline.
+
+---
+
 ## 1. Problem Statement
 
 We solve the mixed-form Darcy flow problem on the unit square $\Omega = [-1,1]^2$ with a piecewise-constant permeability $k$:

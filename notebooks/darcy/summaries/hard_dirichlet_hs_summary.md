@@ -4,6 +4,16 @@
 
 ---
 
+## TL;DR
+
+- We solve mixed-form Darcy flow with a sharp half-square jump in permeability ($k=10$ for $x_1<0$, $k=1$ for $x_1\ge 0$) using hard-enforced boundary conditions.
+- Three models are compared: expert-gated (`combined_exp`), discontinuous-activation (`combined_disc`), and smooth baseline (`combined_smooth`).
+- The expert model gives the best PDE residuals near the interface, but does not best match FEM in pressure error.
+- The smooth baseline achieves the strongest FEM pressure accuracy in this setup.
+- Main takeaway: for this half-square case, lower training residuals do not automatically imply best FEM agreement, and pherhaps interface/contact behavior remains the key challenge.
+
+---
+
 ## 1. Problem Statement
 
 We solve the mixed-form Darcy flow problem on the unit square $\Omega = [-1,1]^2$ with a **half-square** piecewise-constant permeability $k$:
@@ -50,8 +60,8 @@ where:
 
 | Symbol | Requirement | Role |
 |---|---|---|
-| $g_0(x)$ | $g_0\big|_\Gamma = g_\mathrm{BC}$ | **Lift** — already satisfies the BC |
-| $g_1(x)$ | $g_1\big|_\Gamma = 0$ | **Mask** — vanishes on the boundary |
+| $g_0(x)$ | $g_0\big\|_\Gamma = g_\mathrm{BC}$ | **Lift** — already satisfies the BC |
+| $g_1(x)$ | $g_1\big\|_\Gamma = 0$ | **Mask** — vanishes on the boundary |
 
 Because $g_1 = 0$ on $\Gamma$, the learnable correction $g_1 \cdot \hat{u}_\theta$ has no effect there, and $u_\theta\big|_\Gamma = g_0\big|_\Gamma = g_\mathrm{BC}$ holds exactly.
 

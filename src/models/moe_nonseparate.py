@@ -6,7 +6,7 @@ import torch
 
 
 @dataclass
-class DiscModelCtx:
+class MoECtx:
     input_dim: int
     output_dims: List[int]
 
@@ -24,13 +24,13 @@ class DiscModelCtx:
     #   out = g_0(x) + g_1(x) * out
     # Both callables must accept (N, input_dim) and return (N, sum(output_dims)).
     constraint_functions: Tuple = ()
-    normalize_inputt: bool = True
+    normalize_input: bool = True
     hard_enforce: bool = False
 
 
-class DiscontinousModel(nn.Module):
-    def __init__(self, model_ctx: DiscModelCtx):
-        super(DiscontinousModel, self).__init__()
+class MoEModel(nn.Module):
+    def __init__(self, model_ctx: MoECtx):
+        super(MoEModel, self).__init__()
         self.ctx = model_ctx
         self.g_0 = self.ctx.constraint_functions[0] if self.ctx.hard_enforce else None
         self.g_1 = self.ctx.constraint_functions[1] if self.ctx.hard_enforce else None
@@ -40,7 +40,7 @@ class DiscontinousModel(nn.Module):
             sequential = []
             prev_dim = self.ctx.hidden_layers_per_output[i][0]
 
-            if self.ctx.normalize_inputt:
+            if self.ctx.normalize_input:
                 sequential.append(Normalize(self.ctx.l_bounds, self.ctx.u_bounds))
 
             sequential.append(nn.Linear(self.ctx.input_dim, prev_dim))
@@ -69,7 +69,6 @@ class DiscontinousModel(nn.Module):
 
         return out
 
-
     def to(self, device):
-        super(DiscontinousModel, self).to(device)
+        super(MoEModel, self).to(device)
         return self

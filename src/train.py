@@ -11,8 +11,6 @@ import torch.optim as opt
 from typing import List, Callable, Tuple
 from torch.optim.lr_scheduler import _LRScheduler
 from dataclasses import dataclass
-from torch.amp.grad_scaler import GradScaler
-from torch.amp.autocast_mode import autocast
 
 
 
@@ -36,14 +34,14 @@ class TrainingContext:
     reinit_loss: Callable = None
 
 
-def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
+def simple_train(ctx: TrainingContext) -> Tuple[List, List, List]:
     """
     Jednoduchy trenovaci algoritmus, ktery generuje nahodna data v kazde
     epose.
     """
     component_loss_values: List[List] = []
+    component_grad_norm_values: List[List] = []
     total_loss_values = []
-    scaler = GradScaler()
 
     for epoch in range(ctx.epochs):
         ctx.optimizer.zero_grad()
@@ -51,28 +49,43 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
         if ctx.resample and epoch % ctx.resample_freq == 0:
             ctx.domain.generate_points()
 
-        with autocast(device_type='cuda'):
-            loss_components = ctx.loss_fn(ctx.model, ctx.domain)
-            loss = sum(loss_components)
+        loss_components = ctx.loss_fn(ctx.model, ctx.domain)
+        loss = sum(loss_components)
 
         if not component_loss_values:
             component_loss_values = [[] for _ in range(len(loss_components))]
-            
-        scaler.scale(loss).backward()
-        
+            component_grad_norm_values = [[] for _ in range(len(loss_components))]
+
+        is_log_epoch = epoch % 100 == 99 or epoch == 0
+
+        if ctx.monitor_gradient and is_log_epoch:
+            component_grad_norms = []
+            for lc in loss_components:
+                ctx.optimizer.zero_grad()
+                lc.backward(retain_graph=True)
+                norm = 0.0
+                for p in ctx.model.parameters():
+                    if p.grad is not None:
+                        norm += p.grad.data.norm(2).item() ** 2
+                component_grad_norms.append(norm ** 0.5)
+            ctx.optimizer.zero_grad()
+            for i, cn in enumerate(component_grad_norms):
+                component_grad_norm_values[i].append(cn)
+
+        loss.backward()
+
         if not (ctx.scheduler is None):
             ctx.scheduler.step(loss.item())
 
-        if epoch % 100 == 99 or epoch == 0:
+        if is_log_epoch:
             print(f"Loss at epoch {epoch + 1} is: {loss.item()}.", end=' ')
-                
+
             for i, loss_component in enumerate(loss_components):
                 component_loss_values[i].append(loss_component.item())
 
             total_loss_values.append(loss.item())
 
             if ctx.monitor_gradient:
-                scaler.unscale_(ctx.optimizer)
                 total_norm = 0.0
                 for p in ctx.model.parameters():
                     if p.grad is not None:
@@ -80,22 +93,23 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List]:
                         total_norm += param_norm.item() ** 2
                 total_norm = total_norm ** 0.5
                 print(f"Total gradient norm: {total_norm}", end=' ')
+                for i, cn in enumerate(component_grad_norms):
+                    print(f"Component {i} grad norm: {cn}", end=' ')
 
             if ctx.monitor_lr:
                 print(f"Current learing rate: {ctx.optimizer.param_groups[0]['lr']}", end=' ')
 
             print()
-        
-        scaler.step(ctx.optimizer)
-        scaler.update()
 
-    return total_loss_values, component_loss_values
+        ctx.optimizer.step()
+
+    return total_loss_values, component_loss_values, component_grad_norm_values
 
 
 # TODO: either create seperate context for lbfgs, or add lbfgs params into current context
 def train_switch_to_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=500,
                           lbfgs_lr=1e-3, max_iter=20, history_size=10) -> List:
-    total_loss_values, component_loss_values = simple_train(ctx)
+    total_loss_values, component_loss_values, component_grad_norm_values = simple_train(ctx)
 
     def closure() -> torch.Tensor:
         optimizer.zero_grad()
@@ -120,7 +134,7 @@ def train_switch_to_lbfgs(ctx: TrainingContext, epochs_with_lbfgs=500,
             # Konvence: loss_values[0] obsahuje totalni ztratu
             total_loss_values.append(loss.item())
 
-    return total_loss_values, component_loss_values
+    return total_loss_values, component_loss_values, component_grad_norm_values
 
 
 def train_with_lbfgs(ctx: TrainingContext) -> List:

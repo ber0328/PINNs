@@ -18,9 +18,11 @@ class ModelContext:
     fourier_scale: float = 10.0
     fourier_separator: int = 0
     
-    normalize: bool = True
+    normalize_input: bool = True
+    output_scale_factor: torch.Tensor = None
     u_bounds: Tuple = ()
     l_bounds: Tuple = ()
+    
     
     hard_enforce: bool = False
     constraint_functions: Tuple = ()
@@ -37,7 +39,7 @@ class MLPModel(nn.Module):
         self.g_1 = self.ctx.constraint_functions[1] if self.ctx.hard_enforce else None
         layers = []
 
-        if ctx.normalize:
+        if ctx.normalize_input:
             layers.append(Normalize(ctx.l_bounds, ctx.u_bounds))
         
         if ctx.fourier_features:
@@ -75,9 +77,12 @@ class MLPModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.network(x)
         
+        if self.ctx.output_scale_factor is not None:
+            out = self.ctx.output_scale_factor * out
+        
         if self.g_0 is not None and self.g_1 is not None:
             out = self.g_0(x) + self.g_1(x) * out
-            
+        
         return out
 
     def to(self, device):

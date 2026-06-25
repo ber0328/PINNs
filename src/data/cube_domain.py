@@ -22,7 +22,7 @@ class CubeContext:
     loss_fn: Callable = None
     bias_pts: List[Tuple] = None
     time_dependant: bool = True
-
+    
 
 class CubeDomain(AbstractDomain):
     def __init__(self, ctx: CubeContext):

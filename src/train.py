@@ -11,7 +11,7 @@ import torch.optim as opt
 from typing import List, Callable, Tuple
 from torch.optim.lr_scheduler import _LRScheduler
 from dataclasses import dataclass
-
+from torch.autograd import grad
 
 
 LOSS_FN = Callable[[Module, AbstractDomain], Tensor]
@@ -32,6 +32,9 @@ class TrainingContext:
     monitor_lr: bool = False
     detection_metric: Callable = None
     reinit_loss: Callable = None
+    autobalance_weights: bool = False
+    loss_weights: List = None
+    upadte_loss_freq: int = 50
 
 
 def simple_train(ctx: TrainingContext) -> Tuple[List, List, List]:
@@ -46,11 +49,14 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List, List]:
     for epoch in range(ctx.epochs):
         ctx.optimizer.zero_grad()
 
+        loss_components = ctx.loss_fn(ctx.model, ctx.domain)
+        loss = 0
+
+        for i in range(0, len(ctx.loss_weights)):
+            loss += ctx.loss_weights[i] * loss_components[i]
+        
         if ctx.resample and epoch % ctx.resample_freq == 0:
             ctx.domain.generate_points()
-
-        loss_components = ctx.loss_fn(ctx.model, ctx.domain)
-        loss = sum(loss_components)
 
         if not component_loss_values:
             component_loss_values = [[] for _ in range(len(loss_components))]
@@ -78,7 +84,7 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List, List]:
             ctx.scheduler.step(loss.item())
 
         if is_log_epoch:
-            print(f"Loss at epoch {epoch + 1} is: {loss.item()}.", end=' ')
+            print(f"Epoch: {epoch + 1}. Loss: {loss.item()}.", end=' ')
 
             for i, loss_component in enumerate(loss_components):
                 component_loss_values[i].append(loss_component.item())
@@ -92,16 +98,17 @@ def simple_train(ctx: TrainingContext) -> Tuple[List, List, List]:
                         param_norm = p.grad.data.norm(2)
                         total_norm += param_norm.item() ** 2
                 total_norm = total_norm ** 0.5
-                print(f"Total gradient norm: {total_norm}", end=' ')
+                print(f"Total grad: {total_norm}", end=' ')
                 for i, cn in enumerate(component_grad_norms):
-                    print(f"Component {i} grad norm: {cn}", end=' ')
+                    print(f"{i}-th grad: {cn}", end=' ')
+                    print(f"{i}-th weight: {ctx.loss_weights[i]}", end=' ')
 
             if ctx.monitor_lr:
-                print(f"Current learing rate: {ctx.optimizer.param_groups[0]['lr']}", end=' ')
-
-            print()
+                print(f"Current learing rate: {ctx.optimizer.param_groups[0]['lr']}\n", end=' ')
 
         ctx.optimizer.step()
+
+        ctx.loss_weights = update_weights_by_loss(ctx.loss_weights, loss_components)
 
     return total_loss_values, component_loss_values, component_grad_norm_values
 
@@ -164,31 +171,44 @@ def ri_loss(det_metric: torch.Tensor, model: torch.nn.Module, device: str) -> to
     return torch.mean((rand_det_metric - out)**2)
 
 
-# def train_using_reinitialization(ctx: TrainingContext, epochs_until_reinit: int = 2000,
-#                                  reinit_epochs: int = 500, A: float = 0.75):
-#     loss_values = []
-
-#     for epoch in range(ctx.epochs):
-#         ctx.optimizer.zero_grad()
-
-#         if epoch % ctx.resample_freq == 0:
-#             ctx.domain.generate_points()
-
-#         loss = ctx.loss_fn(ctx.model, ctx.domain)
-#         loss.backward()
-#         ctx.optimizer.step()
-
-#         if epoch % epochs_until_reinit == 0:
-            
-
-#         if epoch % epochs_until_reinit < reinit_epochs:
-#             ctx.optimizer.zero_grad()
-
-#             loss_model = ctx.loss_fn(ctx.model, ctx.domain)
-#             loss = loss_model + ri_loss(det_metric, ctx.model, ctx.domain.ctx.device)
+def update_weights_by_loss(weights, losses, beta=0.9, clip=(1.0e-3, 1.0e3)):
+    losses = [l.item() for l in losses]
+    
+    mean_loss = sum(losses) / len(losses)
+    
+    new_weights = []
+    
+    for i in range(0, len(losses)):
+        target = mean_loss / (losses[i] + 1.0e-12)
+        target = max(clip[0], min(clip[1], target))
+        new_weights.append(beta * weights[i] + (1.0 - beta) * target)
+        
+    avg = sum(new_weights) / len(new_weights)
+    return [v / avg for v in new_weights]
 
 
+def grad_norm(loss, params):
+    loss_grads = grad(loss, params, torch.ones_like(loss), 
+                      create_graph=False, retain_graph=True, allow_unused=True)
+    
+    total = 0
+    for g in loss_grads:
+        total += g.detach().pow(2).sum()
+        
+    return torch.sqrt(total + 1e-20).item()
 
-#         if epoch % 100 == 99 or epoch == 0:
-#             print(f"Loss at epoch {epoch + 1} is: {loss.item()}.", end=' ')
-#             loss_values.append(loss.item())
+
+def update_weights_grad(model, losses, weights, beta=0.9, clip=(1e-3, 1.0e3)):
+    params = list(model.trunk.parameters()) if hasattr(model, "trunk") else list(model.parameters())
+
+    grad_norms = [grad_norm(v, params) for v in losses]
+    total_grad = sum(grad_norms) / len(grad_norms)
+    
+    new_weights = []
+    
+    for i in range(0, len(grad_norms)):
+        target = total_grad / (grad_norms[i] + 1.0e-12)
+        target = max(clip[0], min(clip[1], target))
+        new_weights.append(beta * weights[i] + (1.0 - beta) * target)
+
+    return new_weights
